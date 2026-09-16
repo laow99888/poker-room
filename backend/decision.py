@@ -4,7 +4,7 @@
 每个可选动作带一个建议百分比，供玩家参考节奏，而非机械执行。
 """
 
-from . import charts, equity
+from . import charts, equity, textures
 from .ranges import expand_range
 from .table import STREETS, TableError, positions_for
 
@@ -96,7 +96,8 @@ def _mix_no_bet(eff, spr, opponent_count):
     return [("check", 0.85), ("bet", 0.15, 0.33)], "权益落后：过牌为主、偶尔小注诈唬"
 
 
-def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponent_count):
+def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponent_count,
+                          range_adv_val=None):
     """把权益与底池赔率翻译成带概率的行动建议。"""
     eff = eq["win"] + eq["tie"] / 2
     eff_stack = state.get_effective_stack(hero_index)
@@ -109,6 +110,18 @@ def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponen
         mix, reason = _mix_facing_bet(eff, required, spr, opponent_count)
     else:
         mix, reason = _mix_no_bet(eff, spr, opponent_count)
+        # 第一层算法：范围优势调制无注时的下注倾向
+        if range_adv_val is not None:
+            if range_adv_val >= 8:
+                mix = [(m[0], min(1.0, m[1] + 0.10) if m[0] == "bet" else m[1], *m[2:]) for m in mix]
+                total = sum(m[1] for m in mix)
+                mix = [(m[0], m[1] / total, *m[2:]) for m in mix]
+                reason = reason + "；范围优势在你，可以更主动地施压"
+            elif range_adv_val <= -8:
+                mix = [(m[0], m[1] + 0.10 if m[0] == "check" else m[1], *m[2:]) for m in mix]
+                total = sum(m[1] for m in mix)
+                mix = [(m[0], m[1] / total, *m[2:]) for m in mix]
+                reason = reason + "；范围优势在对手，以过牌为主"
 
     # 面对全下且不可再加注时，剔除加注/全下选项并归一化
     max_to = state.max_completion_betting_or_raising_to_amount
@@ -248,8 +261,25 @@ def advice_for(state, hero_index: int, iterations: int, seed=None) -> dict:
     hero_stack = state.stacks[hero_index]
     orbit_cost = state.blinds_or_straddles[0] + bb + ante * state.player_count
 
+    # 第一层算法：牌面结构 + 范围优势/坚果优势
+    texture = textures.analyze_board(board) if board else None
+    range_adv = None
+    nut_adv = None
+    hero_codes, hero_combos, _ = _range_for(positions[hero_index], lines[hero_index])
+    villain_merged = []
+    for opp in opponents:
+        codes, combos, _ = _range_for(opp["pos"], opp["line"])
+        villain_merged.extend(combos)
+    if board and hero_combos and villain_merged:
+        range_adv = textures.range_advantage(hero_combos, villain_merged, board,
+                                             iterations=min(3000, max(1500, iterations // 10)),
+                                             seed=seed)
+        nut_adv = textures.nut_advantage(hero_combos, villain_merged, board,
+                                         runouts=12, seed=seed)
+
     recommendation = _build_recommendation(
-        state, hero_index, eq, to_call, pot, required, len(opponents))
+        state, hero_index, eq, to_call, pot, required, len(opponents),
+        range_adv_val=(range_adv["adv"] if range_adv else None))
 
     return {
         "equity": eq,
@@ -264,4 +294,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None) -> dict:
         "m_value": round(hero_stack / orbit_cost, 1) if orbit_cost > 0 else None,
         "note": "对手范围按其翻前线路自动估算，可在范围图中调整",
         "recommendation": recommendation,
+        "texture": texture,
+        "range_adv": range_adv,
+        "nut_adv": nut_adv,
     }
