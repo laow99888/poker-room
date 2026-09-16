@@ -89,6 +89,9 @@ def validate_inputs(hero, villains, board):
             specs.append(("range", combos))
         elif kind == "combos":
             pairs = v.get("combos") or []
+            weights = v.get("weights")
+            if weights is not None and len(weights) != len(pairs):
+                raise EquityError(f"对手 {idx} 的权重数与组合数不一致")
             cleaned = []
             for pair in pairs:
                 local: set = set()
@@ -97,7 +100,10 @@ def validate_inputs(hero, villains, board):
                 cleaned.append((a, b))
             if not cleaned:
                 raise EquityError(f"对手 {idx} 的组合范围为空")
-            specs.append(("range", cleaned))  # 具体组合与范围共用同一采样池逻辑
+            if weights is None:
+                weights = [1] * len(cleaned)
+            # 池元素统一为 ((c1, c2), weight)
+            specs.append(("range", list(zip(cleaned, weights))))  # 具体组合与范围共用同一采样池逻辑
         else:
             raise EquityError(f"对手 {idx} 的类型未知：{kind!r}")
     return hero, board, specs
@@ -118,7 +124,16 @@ def simulate(hero, villains, board, iterations, seed=None):
     need_board = 5 - len(board_cards)
 
     # 采样全程用字符串，只在评估时转成引擎的牌对象，避免两套表示混用
-    range_pools = [payload for kind, payload in specs if kind == "range"]
+    # 池元素统一为 ((c1, c2), weight)，无权重时权重为 1
+    range_pools = []
+    for kind, payload in specs:
+        if kind != "range":
+            continue
+        if payload and isinstance(payload[0][0], tuple):
+            pools = [(pair, w) for pair, w in payload]
+        else:
+            pools = [(pair, 1) for pair in payload]
+        range_pools.append(pools)
     fixed_hands = [list(payload) for kind, payload in specs if kind == "hand"]
     used = set(hero) | set(board)
     for hand in fixed_hands:
@@ -157,7 +172,9 @@ def simulate(hero, villains, board, iterations, seed=None):
             villain_hands = []
             for pool in range_pools:
                 while True:
-                    c1, c2 = pool[rng.randrange(len(pool))]
+                    pairs = [p for p, _ in pool]
+                    weights = [w for _, w in pool]
+                    c1, c2 = rng.choices(pairs, weights=weights)[0]
                     # range 组合可能撞上已发出的牌，撞了就重抽（与真实发牌等价：
                     # 冲突的组合本来就不可能同时出现）
                     if c1 in avail_set and c2 in avail_set:

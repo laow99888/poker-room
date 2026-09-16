@@ -20,6 +20,23 @@ function tuneIterations() {
 }
 
 const CONFIG_KEY = "paishi_config_v1";
+const NAMES_KEY = "paishi_names_v1";
+
+function loadNames() {
+  try { return JSON.parse(localStorage.getItem(NAMES_KEY) || "{}"); }
+  catch (_) { return {}; }
+}
+function saveNames(d) {
+  try { localStorage.setItem(NAMES_KEY, JSON.stringify(d)); } catch (_) {}
+}
+function opponentName(pos) {
+  return loadNames()[`${state.config.player_count}:${pos}`] || "";
+}
+function setOpponentName(pos, name) {
+  const all = loadNames();
+  all[`${state.config.player_count}:${pos}`] = name;
+  saveNames(all);
+}
 function loadConfig() {
   try {
     const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "null");
@@ -43,7 +60,8 @@ const state = {
   gridMode: null,        // 'hero' | 'board'
   boardPicks: [],
   busy: false,
-  pending: null,         // 忙碌期间用户点击的操作，处理完自动补上
+  pending: null,
+  recorded: false,     // 本手是否已计入对手统计         // 忙碌期间用户点击的操作，处理完自动补上
   error: null,           // 最近一次请求错误（界面优先显示，直到下一次成功）
 };
 
@@ -265,8 +283,13 @@ function renderAdvice() {
       <tr><td>SPR</td><td>${rec.spr ?? "—"}${rec.spr_note ? " · " + rec.spr_note : ""}</td></tr>
       <tr><td>M 值</td><td>${(a.m_value !== null && a.m_value !== undefined) ? a.m_value : "—"}</td></tr>
     </table>
-    <div class="range-list">${a.opponents.map((o) =>
-      `<div class="range-item"><b>${o.pos}</b>：${o.situation} · 约 ${o.combos} 组合 · 剩余 ${bb(o.stack)} BB（对你的风险 ${bb(o.risk_vs_hero)} BB）</div>`).join("")}</div>
+    <div class="range-list">${a.opponents.map((o) => {
+      const name = o.name ? `<b>${o.name}</b>（${o.pos}）` : `<b>${o.pos}</b>`;
+      const stat = o.stats && o.stats.hands >= 5
+        ? ` · VPIP ${o.stats.vpip_pct}% / PFR ${o.stats.pfr_pct}%` : "";
+      const narrow = o.narrowed ? " · 范围已按 PFR 收窄" : "";
+      return `<div class="range-item">${name}：${o.situation} · ${o.combos} 组合${stat}${narrow} · 剩余 ${bb(o.stack)} BB</div>`;
+    }).join("")}</div>
     <p class="footnote">${a.note} · 模拟 ${money(eq.iterations)} 手 · ${eq.elapsedMs} ms</p>`;
 }
 
@@ -298,6 +321,10 @@ function payload() {
     hero_cards: state.heroCards,
     ops: state.ops,
     iterations: ITERATIONS,
+    names: Object.fromEntries(
+      POSITIONS_BY_SIZE[state.config.player_count]
+        .map((p) => [p, opponentName(p)])
+    ),
   };
 }
 
@@ -334,7 +361,14 @@ async function refresh(retries = 0) {
     state.error = null;
     state.view = data;
     state.advice = null;
-    state.busy = false;          // 视图就绪即解锁按钮，建议异步补上
+    state.busy = false;
+    if (data.hand_over && !state.recorded) {
+      state.recorded = true;
+      fetch("/api/stats/record", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload()),
+      }).catch(() => {});
+    }
     renderAll();
     if (data.actor === state.heroPos && !data.hand_over) {
       const r2 = await fetch("/api/hand/advice", {
@@ -441,7 +475,8 @@ document.addEventListener("click", (ev) => {
     case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; $("#board-grid-wrap").hidden = true; refresh(); return;
     case "reset":
       state.ops = []; state.heroCards = [null, null]; state.view = null;
-      state.advice = null; state.pending = null; state.gridMode = "hero"; refresh(); return;
+      state.advice = null; state.pending = null; state.recorded = false; state.gridMode = "hero";
+      refresh(); return;
   }
 });
 
@@ -454,6 +489,12 @@ function rebuildPosOptions(n) {
 }
 
 // 各座位筹码：实时提交（每次输入立即保存，页面重载不丢失）
+$("#names-grid").addEventListener("input", (ev) => {
+  const input = ev.target.closest("input[data-name-pos]");
+  if (!input) return;
+  setOpponentName(input.dataset.namePos, input.value.trim());
+});
+
 $("#stack-grid").addEventListener("input", (ev) => {
   const input = ev.target.closest("input[data-stack-idx]");
   if (!input) return;
@@ -492,13 +533,25 @@ $("#cfg-size").addEventListener("change", () => {
 $("#cfg-pos").addEventListener("change", () => {
   state.heroPos = $("#cfg-pos").value;   // 只换座位，手牌保留，设置顺序无关
   state.ops = []; state.view = null; state.advice = null; state.pending = null;
+  state.recorded = false;
+  renderNames();
   refresh();
 });
 
 /* ---------- 渲染总入口与启动 ---------- */
 
+function renderNames() {
+  const names = POSITIONS_BY_SIZE[state.config.player_count]
+    .filter((p) => p !== state.heroPos);
+  $("#names-grid").innerHTML = names.map((p) => {
+    const v = opponentName(p);
+    return `<label class="stack-cell">${p}<input type="text" data-name-pos="${p}" value="${v}" placeholder="—" aria-label="${p} 对手代号"></label>`;
+  }).join("");
+}
+
 function renderAll() {
   renderHeroSlots();
+  renderNames();
   renderStackInputs();
   renderGrid();
   renderSeats();

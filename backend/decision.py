@@ -4,7 +4,7 @@
 每个可选动作带一个建议百分比，供玩家参考节奏，而非机械执行。
 """
 
-from . import charts, equity, textures
+from . import charts, equity, opponents as opponents_mod, textures
 from .ranges import expand_range
 from .table import STREETS, TableError, positions_for
 
@@ -64,6 +64,46 @@ def _range_for(position: str, line: str):
             return [], combos, charts.SITUATION_LABEL["facing_raise"]
     combos = charts.expand_range(",".join(codes)) if codes else []
     return codes, combos, label
+
+
+_CHEN_VALUES = {"A": 10, "K": 8, "Q": 7, "J": 6}
+_RANK_ORDER_FULL = "AKQJT98765432"
+
+
+def _chen_score(combo) -> float:
+    """Chen 公式：翻前起手牌强度的经典近似评分（用于范围内部排序）。"""
+    ra, rb = combo[0][0], combo[1][0]
+    suited = combo[0][1] == combo[1][1]
+
+    def val(r):
+        if r == "A":
+            return 10
+        if r == "K":
+            return 8
+        if r == "Q":
+            return 7
+        if r == "J":
+            return 6
+        return (_RANK_ORDER_FULL.index(r) + 2) / 2
+
+    hi, lo = max(val(ra), val(rb)), min(val(ra), val(rb))
+    if ra == rb:
+        return max(5.0, hi * 2)
+    score = hi + lo / 2
+    if suited:
+        score += 2
+    gap = abs(_RANK_ORDER_FULL.index(ra) - _RANK_ORDER_FULL.index(rb)) - 1
+    score -= {0: 0, 1: 1, 2: 2, 3: 4}.get(gap, 5)
+    return round(score, 1)
+
+
+def _narrow_by_strength(combos, keep_frac):
+    """按 Chen 强度保留范围内最强的 keep_frac 比例组合。"""
+    if keep_frac >= 1 or len(combos) < 4:
+        return combos, 1.0
+    ranked = sorted(combos, key=lambda c: _chen_score(c), reverse=True)
+    keep = max(1, int(len(ranked) * keep_frac))
+    return ranked[:keep], keep / len(ranked)
 
 
 def _mix_facing_bet(eff, required, spr, opponent_count):
@@ -216,7 +256,7 @@ def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponen
     }
 
 
-def advice_for(state, hero_index: int, iterations: int, seed=None) -> dict:
+def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -> dict:
     """计算英雄当前决策建议（必须轮到英雄行动）。"""
     if state.status is False:
         raise TableError("这手牌已经结束")
@@ -231,13 +271,27 @@ def advice_for(state, hero_index: int, iterations: int, seed=None) -> dict:
 
     opponents = []
     villains = []
+    names = names or {}
     for i in range(state.player_count):
         if i == hero_index or not state.statuses[i]:
             continue
         pos = positions[i]
         codes, combos, label = _range_for(pos, lines[i])
+        name = (names.get(pos) or "").strip()
+        stats = opponents_mod.get_stats(name) if name else None
+        narrowed = False
+        keep_frac = 1.0
+        if stats and stats["hands"] >= 5 and combos and lines[i] in ("rfi", "three_bet"):
+            implied = len(combos) * 100 / 1326
+            observed = stats.get("pfr_pct") or 0
+            if 0 < observed < implied:
+                combos, keep_frac = _narrow_by_strength(combos, observed / implied)
+                narrowed = True
         opponents.append({
             "pos": pos,
+            "name": name or None,
+            "stats": stats,
+            "narrowed": narrowed,
             "line": lines[i],
             "situation": label,
             "combos": len(combos),

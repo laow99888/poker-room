@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import decision, equity
+from . import decision, equity, opponents
 from .ranges import InvalidHandError
 from .table import TableError, replay_state
 
@@ -44,6 +44,7 @@ class HandIn(BaseModel):
     ops: List[dict] = []
     iterations: int = 50_000
     seed: Optional[int] = None
+    names: dict = {}        # 座位 → 对手代号（用于累计统计）
 
 
 def _dump(v) -> dict:
@@ -81,6 +82,7 @@ class HandIn(BaseModel):
     ops: List[dict] = []
     iterations: int = 50_000
     seed: Optional[int] = None
+    names: dict = {}        # 座位 → 对手代号（用于累计统计）
 
 
 def _config_dump(config: HandConfigIn) -> dict:
@@ -114,10 +116,28 @@ def hand_advice_api(payload: HandIn):
     if view["actor"] != payload.hero_pos:
         raise HTTPException(400, f"还没轮到你行动（当前：{view['actor'] or '需要发牌'}）")
     try:
-        advice = decision.advice_for(state, hero_index, payload.iterations, payload.seed)
+        advice = decision.advice_for(state, hero_index, payload.iterations,
+                                     payload.seed, payload.names)
     except TableError as exc:
         raise HTTPException(400, str(exc))
     return {**view, "advice": advice}
+
+
+@app.post("/api/stats/record")
+def stats_record_api(payload: HandIn):
+    """手牌结束后调用：把本手计入对手档案（按签名去重，可安全重复提交）。"""
+    state, hero_index, _ = _replay_or_400(payload)
+    if state.status:
+        raise HTTPException(400, "手牌尚未结束，无法记录")
+    lines = decision._classify_lines(state)
+    result = opponents.record_hand(_config_dump(payload.config), payload.ops,
+                                   payload.names, lines, hero_index=hero_index)
+    return {"recorded": result}
+
+
+@app.get("/api/stats/{name}")
+def stats_get_api(name: str):
+    return opponents.get_stats(name)
 
 
 _FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
