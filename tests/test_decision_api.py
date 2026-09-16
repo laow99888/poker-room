@@ -34,7 +34,7 @@ def test_line_classification_open_vs_3bet():
     lines = _classify_lines(state)
     assert lines[3] == "rfi"          # HJ 首次加注
     assert lines[5] == "three_bet"    # BTN 加注前已有加注
-    assert lines[2] == "call" or lines[2] == "pending"
+    assert lines[2] == "fold_free"   # UTG 后 CO 面前无注弃牌
 
 
 def test_api_advice_hero_turn():

@@ -9,37 +9,71 @@ from .ranges import expand_range
 from .table import STREETS, TableError, positions_for
 
 
-def _classify_lines(state) -> dict:
-    """从引擎操作日志推断每个玩家的翻前线路。
+def player_intel(state) -> dict:
+    """翻前行为情报：每座位的线路分类与行为桶（第二层对手建模的输入）。
 
-    rfi=首次加注；three_bet=再加注；call=跟过注；pending=还没轮到。
+    line: rfi / three_bet / call / check / fold / pending
+    kind: open / threebet / limp / call_raise / check / fold_raise / fold_noraise / pending
     """
-    raise_count = {i: 0 for i in range(state.player_count)}
-    has_called = {i: False for i in range(state.player_count)}
-    first_raise_order = {i: None for i in range(state.player_count)}
+    n = state.player_count
+    raise_count = {i: 0 for i in range(n)}
+    has_vol = {i: False for i in range(n)}
+    first_raise_order = {i: None for i in range(n)}
+    folded_facing_raise = {i: False for i in range(n)}
+    folded_free = {i: False for i in range(n)}
+    checked_free = {i: False for i in range(n)}
+    called_after_raise = {i: False for i in range(n)}
+    limped = {i: False for i in range(n)}
+    raised = {i: False for i in range(n)}
     global_raises = 0
 
     for op in state.operations:
-        name = type(op).__name__
-        if name == "CompletionBettingOrRaisingTo":
-            pi = op.player_index
-            if first_raise_order[pi] is None:
-                first_raise_order[pi] = global_raises
-            raise_count[pi] += 1
+        nm = type(op).__name__
+        i = getattr(op, "player_index", None)
+        if i is None:
+            continue
+        if nm == "CompletionBettingOrRaisingTo":
+            if first_raise_order[i] is None:
+                first_raise_order[i] = global_raises
+            raise_count[i] += 1
+            raised[i] = True
             global_raises += 1
-        elif name == "CheckingOrCalling":
+        elif nm == "CheckingOrCalling":
             if op.amount > 0:
-                has_called[op.player_index] = True
+                if global_raises > 0:
+                    called_after_raise[i] = True
+                else:
+                    limped[i] = True
+                has_vol[i] = True
+            else:
+                checked_free[i] = True
+        elif nm == "Folding":
+            if global_raises > 0:
+                folded_facing_raise[i] = True
+            else:
+                folded_free[i] = True
 
-    lines = {}
-    for i in range(state.player_count):
-        if raise_count[i] >= 1:
-            lines[i] = "rfi" if first_raise_order[i] == 0 else "three_bet"
-        elif has_called[i]:
-            lines[i] = "call"
+    intel = {}
+    for i in range(n):
+        if raised[i]:
+            line = "rfi" if first_raise_order[i] == 0 else "three_bet"
+            kind = "open" if first_raise_order[i] == 0 else "threebet"
+        elif has_vol[i]:
+            line = "call"
+            kind = "limp" if limped[i] else "call_raise"
+        elif folded_facing_raise[i]:
+            line = kind = "fold_raise"
+        elif folded_free[i]:
+            line = kind = "fold_free"
         else:
-            lines[i] = "pending"
-    return lines
+            line = kind = "pending"
+        intel[i] = {"line": line, "kind": kind}
+    return intel
+
+
+def _classify_lines(state) -> dict:
+    """兼容旧调用：返回 {座位索引: line}。"""
+    return {i: v["line"] for i, v in player_intel(state).items()}
 
 
 def _range_for(position: str, line: str):
@@ -265,7 +299,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
         raise TableError(f"还没轮到你行动（当前轮到 {positions[state.actor_index]}）")
 
     positions = positions_for(state.player_count)
-    lines = _classify_lines(state)
+    intel = player_intel(state)
     board = [repr(c) for street in state.board_cards for c in street]
     hero_cards = [repr(c) for c in tuple(state.get_down_cards(hero_index))]
 
@@ -276,27 +310,39 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
         if i == hero_index or not state.statuses[i]:
             continue
         pos = positions[i]
-        codes, combos, label = _range_for(pos, lines[i])
+        line = intel[i]["line"]
+        codes, combos, label = _range_for(pos, line)
         name = (names.get(pos) or "").strip()
         stats = opponents_mod.get_stats(name) if name else None
+        pool = opponents_mod.get_pool(pos)
         narrowed = False
         keep_frac = 1.0
-        if stats and stats["hands"] >= 5 and combos and lines[i] in ("rfi", "three_bet"):
+        range_source = "位置图"
+        # 优先级：具名档案（≥5手）→ 人群位置统计（≥10手）→ 静态图
+        if stats and stats["hands"] >= 5 and combos and line in ("rfi", "three_bet"):
             implied = len(combos) * 100 / 1326
             observed = stats.get("pfr_pct") or 0
             if 0 < observed < implied:
                 combos, keep_frac = _narrow_by_strength(combos, observed / implied)
                 narrowed = True
+            range_source = f"个人档案 {name}（{stats['hands']} 手）"
+        elif pool and line == "rfi":
+            implied = len(combos) * 100 / 1326
+            scale = max(0.35, min(1.0, pool["open_pct"] / implied))
+            if scale < 1.0:
+                combos, keep_frac = _narrow_by_strength(combos, scale)
+            range_source = f"人群统计（{pos} 实际开牌率 {pool['open_pct']}%，样本 {pool['hands']} 手）"
         opponents.append({
             "pos": pos,
             "name": name or None,
             "stats": stats,
             "narrowed": narrowed,
-            "line": lines[i],
+            "range_source": range_source,
+            "line": line,
             "situation": label,
             "combos": len(combos),
-            "stack": state.stacks[i],                       # 剩余筹码
-            "risk_vs_hero": min(state.stacks[i], state.stacks[hero_index]),  # 对你的风险敞口
+            "stack": state.stacks[i],
+            "risk_vs_hero": min(state.stacks[i], state.stacks[hero_index]),
         })
         if combos:
             villains.append({"type": "combos",
@@ -319,7 +365,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
     texture = textures.analyze_board(board) if board else None
     range_adv = None
     nut_adv = None
-    hero_codes, hero_combos, _ = _range_for(positions[hero_index], lines[hero_index])
+    hero_codes, hero_combos, _ = _range_for(positions[hero_index], intel[hero_index]["line"])
     villain_merged = []
     for opp in opponents:
         codes, combos, _ = _range_for(opp["pos"], opp["line"])

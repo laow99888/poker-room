@@ -35,11 +35,12 @@ def hand_signature(config: dict, ops: list) -> str:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def record_hand(config, ops, names: dict, lines: dict, hero_index=None) -> dict:
-    """把一手已完成的牌局计入对手档案。返回 {记入了谁}。
+def record_hand(config, ops, names: dict, intel: dict, hero_index=None) -> dict:
+    """把一手已完成的牌局计入统计。
 
-    names: {座位索引字符串: 对手代号}；空代号进统计池。
-    lines: {座位索引: 'rfi'|'three_bet'|'call'|'pending'}（由 decision 分类）。
+    intel: decision.player_intel(state) 的输出（每座位行为桶）。
+    names: {座位名: 对手代号}；有代名的进个人档案，其余进人群位置池。
+    返回 {"recorded": bool, "names": [...], "pool": True}。
     """
     data = _load()
     seen = data.setdefault("_seen", [])
@@ -52,24 +53,66 @@ def record_hand(config, ops, names: dict, lines: dict, hero_index=None) -> dict:
 
     from .table import positions_for
     positions = positions_for(int(config.get("player_count", 6)))
+
+    pool_pos = data.setdefault("_pool_pos", {})
+    pool = data.setdefault(POOL, {"hands": 0, "vpip": 0, "pfr": 0, "threebet": 0})
     recorded = []
-    for seat_str, line in lines.items():
-        if hero_index is not None and str(seat_str) == str(hero_index):
+
+    for i_str, info in intel.items():
+        i = int(i_str)
+        if i == hero_index:
             continue
-        pos_name = positions[int(seat_str)]
-        name = (names.get(pos_name) or names.get(str(seat_str)) or "").strip() or POOL
-        p = data.setdefault(name, {"hands": 0, "vpip": 0, "pfr": 0, "threebet": 0})
-        p["hands"] += 1
-        if line in ("rfi", "three_bet", "call"):
-            p["vpip"] += 1
-        if line in ("rfi", "three_bet"):
-            p["pfr"] += 1
-        if line == "three_bet":
-            p["threebet"] += 1
-        recorded.append(name)
+        pos = positions[i]
+        line = info.get("line")
+        kind = info.get("kind")
+        name = (names.get(pos) or "").strip()
+
+        # 人群位置统计（所有未弃牌相关行为都计入）
+        pp = pool_pos.setdefault(pos, {"hands": 0, "opens": 0, "limps": 0,
+                                       "threebets": 0, "call_raise": 0, "fold_raise": 0})
+        pp["hands"] += 1
+        if kind == "open":
+            pp["opens"] += 1
+        elif kind == "threebet":
+            pp["threebets"] += 1
+        elif kind == "limp":
+            pp["limps"] += 1
+        elif kind == "call_raise":
+            pp["call_raise"] += 1
+        elif kind == "fold_raise":
+            pp["fold_raise"] += 1
+
+        # 具名档案：翻前主动投入才计入 VPIP/PFR/3bet
+        if name:
+            prof = data.setdefault(name, {"hands": 0, "vpip": 0, "pfr": 0, "threebet": 0})
+            prof["hands"] += 1
+            if kind in ("open", "threebet", "limp", "call_raise"):
+                prof["vpip"] += 1
+            if kind in ("open", "threebet"):
+                prof["pfr"] += 1
+            if kind == "threebet":
+                prof["threebet"] += 1
+            recorded.append(name)
 
     _save(data)
-    return {"recorded": True, "names": sorted(set(recorded))}
+    return {"recorded": True, "names": sorted(set(recorded)), "pool": True}
+
+
+def get_pool(pos: str, min_hands: int = 10):
+    """某位置的人群统计；样本不足返回 None。"""
+    data = _load()
+    pp = data.get("_pool_pos", {}).get(pos)
+    if not pp or pp.get("hands", 0) < min_hands:
+        return None
+    hands = pp["hands"]
+    return {
+        "hands": hands,
+        "open_pct": round(pp.get("opens", 0) * 100 / hands, 1),
+        "limp_pct": round(pp.get("limps", 0) * 100 / hands, 1),
+        "threebet_pct": round(pp.get("threebets", 0) * 100 / hands, 1),
+        "call_raise_pct": round(pp.get("call_raise", 0) * 100 / hands, 1),
+        "fold_raise_pct": round(pp.get("fold_raise", 0) * 100 / hands, 1),
+    }
 
 
 def get_stats(name: str) -> dict:

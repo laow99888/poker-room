@@ -4,6 +4,8 @@ import json
 import pytest
 
 from backend import opponents
+from backend.decision import player_intel
+from backend.table import replay_state
 
 
 @pytest.fixture
@@ -24,11 +26,14 @@ def test_record_accounting(stats_file):
         {"op": "action", "type": "fold", "seat": "BB"},
     ]
     lines = {"3": "call", "4": "rfi"}   # HJ 平跟、CO 开牌加注
-    r = opponents.record_hand(cfg, ops, {"3": "老张"}, lines)
+    state, _, _ = replay_state(cfg, "BTN", ["As", "Ad"], ops)
+    intel = player_intel(state)
+    r = opponents.record_hand(cfg, ops, {"HJ": "老张"}, intel, hero_index=5)
     assert r["recorded"] is True
     data = opponents._load()
     assert data["老张"]["hands"] == 1 and data["老张"]["vpip"] == 1
-    assert data["_pool"]["hands"] == 1 and data["_pool"]["pfr"] == 1
+    assert data["_pool_pos"]["HJ"]["hands"] == 1    # HJ 平跟计入位置池
+    assert data["_pool_pos"]["CO"]["opens"] == 1    # CO 开牌计入位置池
     assert opponents.get_stats("老张")["vpip_pct"] == 100.0
 
 
@@ -40,8 +45,10 @@ def test_record_dedupes_by_signature(stats_file):
            {"op": "action", "type": "fold", "seat": "BTN"},
            {"op": "action", "type": "fold", "seat": "SB"}]
     lines = {"5": "rfi"}
-    r1 = opponents.record_hand(cfg, ops, {"BTN": "老王"}, lines)
-    r2 = opponents.record_hand(cfg, ops, {"BTN": "老王"}, lines)
+    state, _, _ = replay_state(cfg, "BTN", ["As", "Ad"], ops)
+    intel = player_intel(state)
+    r1 = opponents.record_hand(cfg, ops, {"BTN": "老王"}, intel)
+    r2 = opponents.record_hand(cfg, ops, {"BTN": "老王"}, intel)
     assert r1["recorded"] is True and r2["recorded"] is False
     assert opponents.get_stats("老王")["hands"] == 1
 

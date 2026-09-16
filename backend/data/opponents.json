@@ -1,8 +1,59 @@
 {
- "testn": {
-  "hands": 10,
-  "vpip": 5,
-  "pfr": 2,
+ "_seen": [
+  "20c7e255feae7df2"
+ ],
+ "_pool_pos": {
+  "SB": {
+   "hands": 1,
+   "opens": 0,
+   "limps": 0,
+   "threebets": 0,
+   "call_raise": 0,
+   "fold_raise": 1
+  },
+  "BB": {
+   "hands": 1,
+   "opens": 0,
+   "limps": 0,
+   "threebets": 0,
+   "call_raise": 0,
+   "fold_raise": 1
+  },
+  "UTG": {
+   "hands": 1,
+   "opens": 0,
+   "limps": 0,
+   "threebets": 0,
+   "call_raise": 0,
+   "fold_raise": 0
+  },
+  "HJ": {
+   "hands": 1,
+   "opens": 0,
+   "limps": 1,
+   "threebets": 0,
+   "call_raise": 0,
+   "fold_raise": 0
+  },
+  "CO": {
+   "hands": 1,
+   "opens": 1,
+   "limps": 0,
+   "threebets": 0,
+   "call_raise": 0,
+   "fold_raise": 0
+  }
+ },
+ "_pool": {
+  "hands": 0,
+  "vpip": 0,
+  "pfr": 0,
+  "threebet": 0
+ },
+ "老张": {
+  "hands": 1,
+  "vpip": 1,
+  "pfr": 0,
   "threebet": 0
  }
 }
