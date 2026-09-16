@@ -1,0 +1,272 @@
+"""无限注德州扑克牌桌引擎封装（基于 PokerKit）。
+
+座位模型：内部索引 0 = 小盲，1 = 大盲，末位 = 按钮（BTN），中间座位
+按离大盲的远近命名，随桌型变化：
+
+    6 人: SB, BB, UTG, HJ, CO, BTN
+    8 人: SB, BB, UTG, UTG+1, MP, HJ, CO, BTN
+    9 人: SB, BB, UTG, UTG+1, UTG+2, MP, HJ, CO, BTN
+
+发牌从 SB 开始一圈两轮；翻前 UTG 先行动，翻后从按钮左侧第一个
+未弃牌玩家开始。所有机械步骤（前注/盲注/收注/烧牌/推筹/摊牌展示）
+由 PokerKit 自动化完成，本模块只回放人类决策与公共牌。
+"""
+
+import random
+from typing import Optional
+
+from pokerkit import Automation, Card as PKCard, NoLimitTexasHoldem
+
+TABLE_SIZES = (6, 8, 9)
+_POSITIONS_BY_SIZE = {
+    6: ("SB", "BB", "UTG", "HJ", "CO", "BTN"),
+    8: ("SB", "BB", "UTG", "UTG+1", "MP", "HJ", "CO", "BTN"),
+    9: ("SB", "BB", "UTG", "UTG+1", "UTG+2", "MP", "HJ", "CO", "BTN"),
+}
+POSITIONS = _POSITIONS_BY_SIZE[6]  # 兼容旧引用（默认 6 人桌）
+STREETS = ("preflop", "flop", "turn", "river")
+
+
+def positions_for(player_count: int) -> tuple:
+    """按桌型返回座位名元组（0=SB，1=BB，末位=BTN）。"""
+    if player_count not in _POSITIONS_BY_SIZE:
+        raise TableError(f"桌型仅支持 {list(_POSITIONS_BY_SIZE)} 人桌")
+    return _POSITIONS_BY_SIZE[player_count]
+
+_AUTOMATIONS = (
+    Automation.ANTE_POSTING,
+    Automation.BET_COLLECTION,
+    Automation.BLIND_OR_STRADDLE_POSTING,
+    Automation.CARD_BURNING,
+    Automation.CHIPS_PUSHING,
+    Automation.CHIPS_PULLING,
+    Automation.HOLE_CARDS_SHOWING_OR_MUCKING,
+    Automation.HAND_KILLING,
+)
+
+_FILLER_SEED = 20260916  # 占位牌固定种子，保证同一手牌回放完全一致
+
+_ALL_CARDS = [r + s for s in "cdhs" for r in "AKQJT98765432"]
+
+
+class TableError(ValueError):
+    """非法配置或非法操作（含步骤序号，方便前端定位）。"""
+
+
+def _parse_card(text: str, used: set) -> str:
+    t = str(text).strip()
+    if len(t) == 3 and t[1].upper() == "1":
+        t = "T" + t[2]
+    if len(t) != 2 or t[0].upper() not in "AKQJT98765432" or t[1].lower() not in "cdhs":
+        raise TableError(f"无效的牌：{text!r}（示例：As、Kh、Td）")
+    card = t[0].upper() + t[1].lower()
+    if card in used:
+        raise TableError(f"牌 {card} 已经在牌局中（重复）")
+    used.add(card)
+    return card
+
+
+def build_state(config: dict) -> "NoLimitTexasHoldem":
+    """按桌型/盲注/前注/筹码配置创建牌局。"""
+    try:
+        sb, bb, ante = int(config["sb"]), int(config["bb"]), int(config.get("ante", 0))
+        player_count = int(config.get("player_count", 6))
+        stacks = config.get("stacks")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise TableError(f"配置不完整或非法：{exc}") from exc
+    if player_count not in _POSITIONS_BY_SIZE:
+        raise TableError(f"桌型仅支持 {list(_POSITIONS_BY_SIZE)} 人桌")
+    if not 0 < sb <= bb:
+        raise TableError("需要 0 < 小盲 ≤ 大盲")
+    if ante < 0:
+        raise TableError("前注不能为负")
+    if stacks is None:
+        stacks = [bb * 50] * player_count
+    if len(stacks) != player_count or any(int(x) <= 0 for x in stacks):
+        raise TableError(f"筹码须为 {player_count} 个正整数")
+    # PokerKit 建局时用全局 random 洗牌。这里临时固定种子，保证同一手牌
+    # 的烧牌顺序完全可复现（回放一致性），且不污染应用的其他随机流。
+    rng_state = random.getstate()
+    random.seed(_FILLER_SEED)
+    try:
+        return NoLimitTexasHoldem.create_state(
+            automations=_AUTOMATIONS,
+            ante_trimming_status=True,
+            raw_antes=ante,
+            raw_blinds_or_straddles=(sb, bb),
+            min_bet=bb,
+            raw_starting_stacks=[int(x) for x in stacks],
+            player_count=player_count,
+        )
+    except ValueError as exc:
+        raise TableError(f"筹码设置无法开局（检查是否有座位付不起盲注/前注）：{exc}") from exc
+    finally:
+        random.setstate(rng_state)
+
+
+def deal_hole(state, hero_index: int, hero_cards) -> dict:
+    """发底牌：英雄拿真实手牌，其余座位发确定性占位牌。
+
+    返回 {座位索引: [牌, 牌]}（英雄为真实牌，其余为占位，仅供引擎结算）。
+    """
+    used = set()
+    hero_cards = [_parse_card(c, used) for c in hero_cards]
+    if len(hero_cards) != 2:
+        raise TableError("底牌必须是 2 张")
+    n = state.player_count
+    dealt = {i: [] for i in range(n)}
+    fillers = [c for c in _ALL_CARDS if c not in used]
+    random.Random(_FILLER_SEED).shuffle(fillers)
+    order = [seat for _round in range(2) for seat in range(n)]  # SB→BTN 两圈
+    for seat in order:
+        if seat == hero_index:
+            card = hero_cards.pop(0) if hero_cards else fillers.pop(0)
+        else:
+            card = fillers.pop(0)
+        state.deal_hole(PKCard(card[0], card[1]))
+        dealt[seat].append(card)
+    return dealt
+
+
+def apply_ops(state, ops) -> None:
+    """按序回放操作（行动 / 发公共牌），任何非法步骤抛 TableError。"""
+    for idx, op in enumerate(ops, start=1):
+        kind = op.get("op")
+        try:
+            if kind == "action":
+                _apply_action(state, op)
+            elif kind == "board":
+                _apply_board(state, op)
+            else:
+                raise TableError(f"未知操作类型：{kind!r}")
+        except TableError:
+            raise
+        except ValueError as exc:
+            raise TableError(f"第 {idx} 步无效：{exc}") from exc
+
+
+def _apply_action(state, op) -> None:
+    positions = positions_for(state.player_count)
+    actor = state.actor_index
+    if actor is None:
+        raise TableError("当前没有待行动玩家（可能该发公共牌了）")
+    seat = op.get("seat")
+    if seat is not None and seat not in positions:
+        raise TableError(f"未知座位：{seat!r}")
+    if seat is not None and positions.index(seat) != actor:
+        raise TableError(f"轮到 {positions[actor]} 行动，不是 {seat}")
+
+    kind = op.get("type")
+    if kind == "fold":
+        state.fold()
+    elif kind in ("check", "call"):
+        state.check_or_call()
+    elif kind == "raise":
+        to = op.get("to")
+        if to is None:
+            raise TableError("加注需要 to（加注到多少）")
+        to = int(to)
+        lo = state.min_completion_betting_or_raising_to_amount
+        hi = state.max_completion_betting_or_raising_to_amount
+        if not lo <= to <= hi:
+            hint = "（此数额即全下）" if to == hi else ""
+            raise TableError(
+                f"{positions[actor]} 加注到 {to} 不合法，"
+                f"范围 [{lo}, {hi}]{hint}"
+            )
+        state.complete_bet_or_raise_to(to)
+    elif kind == "allin":
+        state.complete_bet_or_raise_to(state.max_completion_betting_or_raising_to_amount)
+    else:
+        raise TableError(f"未知动作：{kind!r}")
+
+
+def _apply_board(state, op) -> None:
+    cards = op.get("cards")
+    if not isinstance(cards, list) or not cards:
+        raise TableError("发牌操作需要 cards 列表")
+    street = STREETS[state.street_index]
+    expect = state.streets[state.street_index].board_dealing_count
+    if expect == 0:
+        raise TableError("当前还在翻牌前，下注结束后才能发公共牌")
+    if len(cards) != expect:
+        raise TableError(f"{street} 应一次发 {expect} 张，收到 {len(cards)} 张")
+    # 只有牌堆里剩下的牌可发；其余都在某人底牌、弃牌或烧牌里
+    dealable = {repr(c) for c in state.get_dealable_cards()}
+    clean = []
+    for c in cards:
+        code = repr(c).strip() if not isinstance(c, str) else str(c).strip()
+        if code not in dealable:
+            raise TableError(
+                f"牌 {code} 已不在牌堆里（它可能在某个玩家的底牌中）——换一张试试"
+            )
+        clean.append(PKCard(code[0], code[1]))
+    state.deal_board(tuple(clean))
+
+
+def hand_view(state, hero_index: int, dealt: dict) -> dict:
+    """把引擎状态序列化成前端视图。"""
+    positions = positions_for(state.player_count)
+    n = state.player_count
+    seats = []
+    for i in range(n):
+        seats.append({
+            "pos": positions[i],
+            "stack": state.stacks[i],
+            "bet": int(state.bets[i]),          # 当前街已投入的下注
+            "in_hand": bool(state.statuses[i]),
+            "is_hero": i == hero_index,
+        })
+    actor = positions[state.actor_index] if state.actor_index is not None else None
+    street = STREETS[state.street_index] if state.street_index is not None else "over"
+    # 不可再被选中的牌 = 全副牌 - 牌堆剩余（含底牌、弃牌、烧牌、已发出的公共牌）
+    dealable = {repr(c) for c in state.get_dealable_cards()}
+    taken = sorted(c for c in _ALL_CARDS if c not in dealable)
+    view = {
+        "positions": list(positions),
+        "street": street,
+        "board": [repr(c) for street in state.board_cards for c in street],
+        "taken": taken,
+        "pot": state.total_pot_amount,
+        "seats": seats,
+        "actor": actor,
+        "hand_over": not state.status,
+        "hero": {
+            "pos": positions[hero_index],
+            "cards": dealt[hero_index],
+            "stack": state.stacks[hero_index],
+        },
+    }
+    if actor is not None:
+        view["to_call"] = state.checking_or_calling_amount
+        view["min_raise_to"] = state.min_completion_betting_or_raising_to_amount
+        view["max_raise_to"] = state.max_completion_betting_or_raising_to_amount
+    if not state.status:
+        view["payoffs"] = {positions[i]: int(p) for i, p in enumerate(state.payoffs) if p != 0}
+        view["starting_stacks"] = [int(x) for x in state.starting_stacks]
+        # 摊牌亮牌：亮所有没弃牌的玩家。不能用 state.statuses 判断——
+        # 结算后 HAND_KILLING 会清掉输家的在局状态；弃牌者从操作日志取。
+        folded = {op.player_index for op in state.operations
+                  if type(op).__name__ == "Folding"}
+        view["revealed"] = {
+            positions[i]: list(dealt[i]) for i in range(n) if i not in folded
+        }
+    return view
+
+
+def replay(config: dict, hero_pos: str, hero_cards, ops) -> dict:
+    """无状态回放：配置 + 英雄手牌 + 操作序列 → 视图。"""
+    state, hero_index, dealt = replay_state(config, hero_pos, hero_cards, ops)
+    return hand_view(state, hero_index, dealt)
+
+
+def replay_state(config: dict, hero_pos: str, hero_cards, ops):
+    """同 replay，但返回 (引擎状态, 英雄座位索引, 发牌表) 供建议计算复用。"""
+    positions = positions_for(int(config.get("player_count", 6)))
+    if hero_pos not in positions:
+        raise TableError(f"未知座位：{hero_pos!r}，可选 {list(positions)}")
+    hero_index = positions.index(hero_pos)
+    state = build_state(config)
+    dealt = deal_hole(state, hero_index, hero_cards)
+    apply_ops(state, ops)
+    return state, hero_index, dealt

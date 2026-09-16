@@ -1,0 +1,523 @@
+/* 牌室 · 6人桌 MTT 决策辅助（原生 JS，只与本机服务通信） */
+"use strict";
+
+const RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"];
+const SUITS = ["s", "h", "d", "c"];
+const SUIT_GLYPH = { s: "♠", h: "♥", d: "♦", c: "♣" };
+const SUIT_NAME = { s: "黑桃", h: "红心", d: "方块", c: "梅花" };
+const IS_RED = { s: false, h: true, d: true, c: false };
+const POSITIONS_BY_SIZE = {
+  6: ["SB", "BB", "UTG", "HJ", "CO", "BTN"],
+  8: ["SB", "BB", "UTG", "UTG+1", "MP", "HJ", "CO", "BTN"],
+  9: ["SB", "BB", "UTG", "UTG+1", "UTG+2", "MP", "HJ", "CO", "BTN"],
+};
+const STREET_DEAL = { flop: 3, turn: 1, river: 1 };
+const STREET_LABEL = { flop: "翻牌", turn: "转牌", river: "河牌" };
+let ITERATIONS = 50000;
+function tuneIterations() {
+  // 模拟成本随人数线性涨：按桌型缩放，保证建议在几秒内返回
+  ITERATIONS = Math.max(10000, Math.round(170000 / state.config.player_count));
+}
+
+const CONFIG_KEY = "paishi_config_v1";
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "null");
+    if (saved && POSITIONS_BY_SIZE[saved.player_count] && saved.sb > 0 && saved.bb > 0) {
+      return saved;
+    }
+  } catch (_) { /* 忽略损坏的存档 */ }
+  return { player_count: 6, sb: 100, bb: 200, ante: 25, stack: 10000, stacks: null };
+}
+function saveConfig() {
+  try { localStorage.setItem(CONFIG_KEY, JSON.stringify(state.config)); } catch (_) {}
+}
+
+const state = {
+  config: loadConfig(),
+  heroPos: "BTN",
+  heroCards: [null, null],
+  ops: [],
+  view: null,
+  advice: null,
+  gridMode: null,        // 'hero' | 'board'
+  boardPicks: [],
+  busy: false,
+  pending: null,         // 忙碌期间用户点击的操作，处理完自动补上
+  error: null,           // 最近一次请求错误（界面优先显示，直到下一次成功）
+};
+
+const $ = (sel) => document.querySelector(sel);
+const money = (n) => Number(n).toLocaleString("zh-CN");
+const bb = (chips) => (chips / state.config.bb).toFixed(1);          // 筹码 → BB 显示
+const bbToChips = (v) => Math.round(Number(v) * state.config.bb);    // BB 输入 → 筹码
+
+/* ---------- 牌面组件 ---------- */
+
+function cardBtn(card, disabled, label) {
+  const cls = `grid-card ${IS_RED[card[1]] ? "red" : "black"}`;
+  const dis = disabled ? "disabled" : "";
+  return `<button type="button" class="${cls}" ${dis} data-action="card"
+    data-card="${card}" aria-label="${label}">${card[0]}${SUIT_GLYPH[card[1]]}</button>`;
+}
+
+function renderGrid() {
+  const taken = new Set();
+  if (state.view) (state.view.taken || []).forEach((c) => taken.add(c));
+  state.heroCards.forEach((c) => c && taken.add(c));
+  state.boardPicks.forEach((c) => taken.add(c));
+  const html = SUITS.map((s) =>
+    RANKS.map((r) => cardBtn(r + s, false, `选择 ${r}${SUIT_NAME[s]}`)).join("")
+  ).join("");
+  const boardHtml = SUITS.map((s) =>
+    RANKS.map((r) => {
+      const card = r + s;
+      return cardBtn(card, taken.has(card), `选择 ${r}${SUIT_NAME[s]}`);
+    }).join("")
+  ).join("");
+  $("#card-grid").innerHTML = html;                                       // 常驻：选底牌
+  $("#board-grid").innerHTML = state.gridMode === "board" ? boardHtml : ""; // 发公共牌
+}
+
+function renderHeroSlots() {
+  $("#hero-slots").innerHTML = state.heroCards.map((c, i) => {
+    const act = `data-action="hero-pick" data-idx="${i}"`;
+    if (c) {
+      const cls = `slot filled ${IS_RED[c[1]] ? "red" : "black"}`;
+      return `<button type="button" class="${cls}" ${act}
+        aria-label="清除 ${c[0]}${SUIT_NAME[c[1]]}"><span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span></button>`;
+    }
+    return `<button type="button" class="slot" ${act} aria-label="选择第 ${i + 1} 张底牌">+</button>`;
+  }).join("");
+}
+
+/* ---------- 牌桌与操作台 ---------- */
+
+function currentStacks() {
+  if (state.config.stacks && state.config.stacks.length === state.config.player_count) {
+    return [...state.config.stacks];
+  }
+  return Array(state.config.player_count).fill(state.config.stack);
+}
+
+function renderStackInputs() {
+  const names = POSITIONS_BY_SIZE[state.config.player_count];
+  const stacks = currentStacks();
+  const inputs = document.querySelectorAll('#stack-grid input[data-stack-idx]');
+  const unchanged = inputs.length === names.length &&
+    Array.from(inputs).every((el, i) => el.value === String(stacks[i]));
+  if (unchanged) return;   // 值一致就不动 DOM，避免打断编辑
+  $("#stack-grid").innerHTML = names.map((p, i) =>
+    `<label class="stack-cell">${p}<input type="number" min="1" data-stack-idx="${i}" value="${stacks[i]}" aria-label="${p} 筹码"></label>`).join("");
+}
+
+function seatXY(i, n) {
+  const angle = (90 + (i * 360) / n) * Math.PI / 180;  // BTN 在底部，按桌型均分
+  return { left: 50 + 40 * Math.cos(angle), top: 50 + 37 * Math.sin(angle) };
+}
+
+function renderSeats() {
+  const n = state.config.player_count;
+  const names = POSITIONS_BY_SIZE[n];
+  const layer = $("#seat-layer");
+  const seatsHtml = names.map((pos, i) => {
+    const xy = seatXY(i, n);
+    let inner = `<div class="pos-tag">${pos}</div>`;
+    let cls = "seat";
+    if (state.view) {
+      const seat = state.view.seats.find((s) => s.pos === pos);
+      if (seat) {
+        const acting = state.view.actor === pos;
+        const folded = !seat.in_hand && !state.view.hand_over;
+        const allin = seat.in_hand && seat.stack === 0;
+        const badges = [];
+        if (pos === "BTN") badges.push('<span class="chip chip-d">D</span>');
+        if (pos === "SB") badges.push('<span class="chip chip-sb">SB</span>');
+        if (pos === "BB") badges.push('<span class="chip chip-bb">BB</span>');
+        if (folded) badges.push('<span class="badge badge-fold">弃</span>');
+        if (allin) badges.push('<span class="badge badge-allin">全下</span>');
+        if (seat.bet > 0 && !folded) badges.push(`<span class="bet-chip">${bb(seat.bet)} BB</span>`);
+        const revealedCards = state.view.hand_over && state.view.revealed && state.view.revealed[pos];
+        const cardsHtml = seat.is_hero && state.heroCards[0]
+          ? `<div class="seat-cards">${state.heroCards.map((c) =>
+              `<span class="mini-card ${IS_RED[c[1]] ? "red" : ""}">${c[0]}${SUIT_GLYPH[c[1]]}</span>`).join("")}</div>`
+          : (revealedCards
+              ? `<div class="seat-cards" title="摊牌亮牌">${revealedCards.map((c) =>
+                  `<span class="mini-card ${IS_RED[c[1]] ? "red" : ""}">${c[0]}${SUIT_GLYPH[c[1]]}</span>`).join("")}</div>`
+              : "");
+        cls += `${acting ? " acting" : ""}${folded ? " folded" : ""}${seat.is_hero ? " hero" : ""}`;
+        inner = `<div class="pos-tag">${pos}${seat.is_hero ? " · 你" : ""}</div>
+          <div class="stack">${bb(seat.stack)}<small class="bb-tag"> BB</small></div>
+          <div class="badges">${badges.join("")}</div>${cardsHtml}`;
+      }
+    }
+    const xyStyle = state.view
+      ? `left:${xy.left.toFixed(1)}%;top:${xy.top.toFixed(1)}%;`
+      : `left:${xy.left.toFixed(1)}%;top:${xy.top.toFixed(1)}%;`;
+    return `<div class="${cls}" style="${xyStyle}">${inner}</div>`;
+  }).join("");
+  layer.innerHTML = seatsHtml;
+  $("#pot-num").textContent = state.view ? bb(state.view.pot) + " BB" : "0 BB";
+  $("#street-caption").textContent = state.view ? `阶段：${{ preflop: "翻牌前", flop: "翻牌", turn: "转牌", river: "河牌", over: "结束" }[state.view.street]}` : "";
+}
+
+function renderBoard() {
+  const board = state.view ? state.view.board : [];
+  $("#board-slots").innerHTML = [0, 1, 2, 3, 4].map((i) => {
+    const c = board[i];
+    if (c) return `<div class="slot filled ${IS_RED[c[1]] ? "red" : "black"} static"><span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span></div>`;
+    return '<div class="slot static" aria-hidden="true"></div>';
+  }).join("");
+}
+
+function renderConsole() {
+  const area = $("#action-area");
+  const line = $("#status-line");
+  line.classList.remove("err");
+  $("#ops-line").innerHTML = state.ops.map((op, i) => {
+    const txt = op.op === "board"
+      ? `发牌 ${op.cards.join(" ")}`
+      : `${op.seat} ${ { fold: "弃牌", check: "过牌", call: "跟注", raise: `加注到 ${bb(op.to || 0)} BB`, allin: "全下" }[op.type] }`;
+    return `<span class="op-chip">${i + 1}. ${txt}</span>`;
+  }).join("");
+
+  if (!state.view) {
+    if (state.error) { area.innerHTML = ""; return; }   // 保留错误提示不被覆盖
+    line.textContent = state.heroCards.every(Boolean)
+      ? "底牌已选好，正在请求本局数据…"
+      : "先点下方牌面网格，选你的 2 张底牌。";
+    area.innerHTML = "";
+    return;
+  }
+
+  if (state.view.hand_over) {
+    const pay = state.view.payoffs || {};
+    line.textContent = "手牌结束 — 各家盈亏：" +
+      Object.entries(pay).map(([p, v]) => `${p} ${v > 0 ? "+" : ""}${money(v)}`).join("，") || "无变动";
+    area.innerHTML = `<button type="button" class="primary-btn" data-action="reset">再来一手</button>`;
+    return;
+  }
+
+  if (!state.view.actor) {
+    const n = STREET_DEAL[state.view.street];
+    const label = STREET_LABEL[state.view.street] || "公共牌";
+    line.textContent = `本轮下注结束，发${label}（${n} 张）`;
+    area.innerHTML = `<button type="button" class="ghost-btn" data-action="deal-toggle">
+        ${state.gridMode === "board" ? "收起牌面" : `发${label}`}</button>`;
+    return;
+  }
+
+  const isHero = state.view.actor === state.heroPos;
+  line.innerHTML = `轮到 <b>${state.view.actor}${isHero ? "（你）" : ""}</b>` +
+    (state.view.to_call > 0 ? ` · 需跟注 ${bb(state.view.to_call)} BB` : " · 无注");
+
+  const tc = state.view.to_call;
+  const dis = state.busy ? "disabled" : "";
+  const clampTo = (chips) => Math.max(state.view.min_raise_to, Math.min(state.view.max_raise_to, chips));
+  const presets = {
+    min: state.view.min_raise_to,
+    half: clampTo(tc + Math.round(state.view.pot * 0.5)),
+    pot: clampTo(tc + state.view.pot),
+  };
+    const foldBtn = tc > 0
+    ? `<button type="button" class="act-btn fold" ${dis} data-action="do-fold">弃牌</button>`
+    : "";   // 面前无注时规则上不允许弃牌，只提供过牌/加注
+  area.innerHTML = `
+    <div class="action-row">
+      ${foldBtn}
+      <button type="button" class="act-btn call" ${dis} data-action="do-call">${tc > 0 ? `跟注 ${bb(tc)} BB` : "过牌"}</button>
+      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.min}" title="加注到最小加注额">加注 ${bb(presets.min)} BB</button>
+      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.half}" title="下注约半个底池">半池 ${bb(presets.half)} BB</button>
+      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.pot}" title="下注约一个底池">满池 ${bb(presets.pot)} BB</button>
+      <button type="button" class="act-btn allin" ${dis} data-action="do-allin">全下 ${bb(state.view.max_raise_to)} BB</button>
+    </div>
+    <div class="raise-row">
+      <input type="number" id="raise-to" step="0.1" value="${bb(presets.min)}" min="${bb(state.view.min_raise_to)}" max="${bb(state.view.max_raise_to)}" aria-label="自定义加注到（BB），回车确认" ${dis}> BB
+      <button type="button" class="ghost-btn" ${dis} data-action="do-raise-input">按输入值加注（回车）</button>
+    </div>`;
+}
+
+/* ---------- 建议面板 ---------- */
+
+function renderAdvice() {
+  const box = $("#advice");
+  const a = state.advice;
+  $("#advice-note").textContent = a ? "范围自动估算" : "";
+  if (!a) {
+    const heroActing = state.view && state.view.actor === state.heroPos && !state.view.hand_over;
+    box.innerHTML = heroActing
+      ? '<p class="empty">计算中…</p>'
+      : '<p class="empty">轮到你行动时，这里给出胜率与赔率分析。</p>';
+    return;
+  }
+  const eq = a.equity;
+  const rec = a.recommendation;
+  box.innerHTML = `
+    <div class="big">${eq.win.toFixed(1)}<small> % 胜率（含平 ${eq.tie.toFixed(1)}%）</small></div>
+    <div class="bar" role="img" aria-label="胜 ${eq.win}% 平 ${eq.tie}% 负 ${eq.lose}%">
+      <i class="w" style="width:${eq.win}%"></i><i class="t" style="width:${eq.tie}%"></i><i class="l" style="width:${eq.lose}%"></i>
+    </div>
+    <table class="adv-table">
+      <tr><td>需跟注</td><td>${a.to_call > 0 ? bb(a.to_call) + " BB" : "0（可过牌）"}</td></tr>
+      <tr><td>跟注所需胜率</td><td>${a.required_eq}%</td></tr>
+      <tr><td>你的权益</td><td>${(eq.win + eq.tie / 2).toFixed(1)}%</td></tr>
+      <tr><td>跟注 EV</td><td class="${a.ev_call >= 0 ? "pos" : "neg"}">${a.ev_call >= 0 ? "+" : ""}${bb(a.ev_call)} BB</td></tr>
+      <tr><td>SPR</td><td>${rec.spr ?? "—"}${rec.spr_note ? " · " + rec.spr_note : ""}</td></tr>
+      <tr><td>M 值</td><td>${(a.m_value !== null && a.m_value !== undefined) ? a.m_value : "—"}</td></tr>
+    </table>
+    <div class="range-list">${a.opponents.map((o) =>
+      `<div class="range-item"><b>${o.pos}</b>：${o.situation} · 约 ${o.combos} 组合 · 剩余 ${bb(o.stack)} BB（对你的风险 ${bb(o.risk_vs_hero)} BB）</div>`).join("")}</div>
+    <p class="footnote">${a.note} · 模拟 ${money(eq.iterations)} 手 · ${eq.elapsedMs} ms</p>`;
+}
+
+function commitRaiseInput() {
+  if (!state.view || state.view.actor == null) return;
+  const to = clampToChips(Number($("#raise-to").value));
+  pushOp({ op: "action", type: "raise", to, seat: state.view.actor });
+}
+
+function clampToChips(v) {
+  const lo = state.view.min_raise_to, hi = state.view.max_raise_to;
+  return Math.max(lo, Math.min(hi, bbToChips(v)));
+}
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && ev.target && ev.target.id === "raise-to") {
+    ev.preventDefault();
+    commitRaiseInput();
+  }
+});
+
+/* ---------- 与服务端交互 ---------- */
+
+function payload() {
+  return {
+    config: { player_count: state.config.player_count, sb: state.config.sb, bb: state.config.bb, ante: state.config.ante,
+              stacks: currentStacks() },
+    hero_pos: state.heroPos,
+    hero_cards: state.heroCards,
+    ops: state.ops,
+    iterations: ITERATIONS,
+  };
+}
+
+function showError(msg) {
+  state.error = msg;
+  const line = $("#status-line");
+  line.classList.add("err");
+  const hint = "（可点「撤销上一步」回退）";
+  line.textContent = msg.includes(hint) ? msg : msg + hint;
+}
+
+async function refresh(retries = 0) {
+  if (!state.heroCards.every(Boolean)) { renderAll(); return; }
+  if (state.busy) return;                    // 防重入
+  state.busy = true;
+  try {
+    const r = await fetch("/api/hand/view", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload()),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      // 自愈：最后一步操作非法（常见于连点），撤销后重试
+      if (state.ops.length > 0 && retries < 3) {
+        state.ops.pop();
+        state.busy = false;
+        return refresh(retries + 1);
+      }
+      showError((data.detail || `请求失败（${r.status}）`) + "（可点「撤销上一步」回退）");
+      state.busy = false;
+      renderAll();
+      return;
+    }
+    state.error = null;
+    state.view = data;
+    state.advice = null;
+    state.busy = false;          // 视图就绪即解锁按钮，建议异步补上
+    renderAll();
+    if (data.actor === state.heroPos && !data.hand_over) {
+      const r2 = await fetch("/api/hand/advice", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload()),
+      });
+      if (r2.ok) {
+        state.advice = (await r2.json()).advice;
+        renderAdvice();
+      }
+    }
+  } catch (_) {
+    state.busy = false;
+    showError("无法连接本机服务 — 请确认服务正在运行");
+    renderAll();
+  }
+  if (state.pending) {
+    const op = state.pending;
+    state.pending = null;
+    pushOp(op);
+  }
+}
+
+function pushOp(op) {
+  if (state.busy) { state.pending = op; return; }          // 忙碌：暂存，处理完自动补上
+  if (op.op === "action") {
+    if (!state.view || state.view.hand_over || state.view.actor !== op.seat) return;  // 行动者校验
+  }
+  if (op.op === "board" && state.view && state.view.actor) return;
+  state.error = null;
+  state.ops.push(op);
+  refresh();
+}
+
+/* ---------- 事件 ---------- */
+
+document.addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-action]");
+  if (!btn) return;
+  if (state.busy) return;
+  const action = btn.dataset.action;
+
+  switch (action) {
+    case "card": {
+      const card = btn.dataset.card;
+      if (state.gridMode === "board") {
+        if (!state.boardPicks.includes(card)) state.boardPicks.push(card);
+        const need = STREET_DEAL[state.view.street];
+        if (state.boardPicks.length >= need) {
+          state.ops.push({ op: "board", cards: state.boardPicks.slice(0, need) });
+          state.boardPicks = [];
+          state.gridMode = null;
+          $("#board-grid-wrap").hidden = true;
+          refresh();
+        } else {
+          renderGrid();
+        }
+      } else {
+        const idx = state.heroCards.findIndex((c) => !c);
+        if (idx >= 0) state.heroCards[idx] = card;
+        else state.heroCards = [card, state.heroCards[1]];  // 满了则替换第一张
+        state.ops = []; state.view = null; state.advice = null;  // 换底牌即重开这一手
+        refresh();
+      }
+      return;
+    }
+    case "hero-pick": {
+      const idx = Number(btn.dataset.idx);
+      if (state.heroCards[idx]) {
+        state.heroCards[idx] = null;
+        state.ops = []; state.view = null; state.advice = null;
+      }
+      refresh(); return;
+    }
+    case "hero-clear": {
+      state.heroCards[Number(btn.dataset.idx)] = null;
+      state.ops = []; state.view = null; state.advice = null;
+      refresh(); return;
+    }
+    case "deal-toggle": {
+      state.gridMode = state.gridMode === "board" ? null : "board";
+      state.boardPicks = [];
+      $("#board-grid-wrap").hidden = state.gridMode !== "board";
+      $("#board-pick-tip").textContent = `选 ${STREET_DEAL[state.view.street]} 张`;
+      renderGrid(); renderConsole(); return;
+    }
+    case "do-fold": pushOp({ op: "action", type: "fold", seat: state.view.actor }); return;
+    case "do-call": pushOp({ op: "action", type: state.view.to_call > 0 ? "call" : "check", seat: state.view.actor }); return;
+    case "do-allin": pushOp({ op: "action", type: "allin", seat: state.view.actor }); return;
+    case "do-raise-to": {
+      const to = clampToChips(Number(btn.dataset.to));
+      pushOp({ op: "action", type: "raise", to, seat: state.view.actor });
+      return;
+    }
+    case "do-raise-input": commitRaiseInput(); return;
+    case "reopen":
+      // 全新重开：筹码恢复默认 + 清空手牌与操作记录
+      state.config.stacks = null;
+      saveConfig();
+      state.ops = []; state.heroCards = [null, null]; state.view = null;
+      state.advice = null; state.pending = null; state.error = null; state.gridMode = "hero";
+      refresh();
+      return;
+    case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; $("#board-grid-wrap").hidden = true; refresh(); return;
+    case "reset":
+      state.ops = []; state.heroCards = [null, null]; state.view = null;
+      state.advice = null; state.pending = null; state.gridMode = "hero"; refresh(); return;
+  }
+});
+
+function rebuildPosOptions(n) {
+  const sel = $("#cfg-pos");
+  const names = POSITIONS_BY_SIZE[n];
+  sel.innerHTML = names.map((p) => `<option>${p}</option>`).join("");
+  sel.value = names[names.length - 1];   // 默认 BTN
+  state.heroPos = sel.value;
+}
+
+// 各座位筹码：实时提交（每次输入立即保存，页面重载不丢失）
+$("#stack-grid").addEventListener("input", (ev) => {
+  const input = ev.target.closest("input[data-stack-idx]");
+  if (!input) return;
+  const stacks = currentStacks();
+  stacks[Number(input.dataset.stackIdx)] = Math.max(1, Number(input.value) || 1);
+  state.config.stacks = stacks;
+  saveConfig();
+});
+
+$("#cfg-size").addEventListener("change", () => {
+  state.config.player_count = Number($("#cfg-size").value);
+  saveConfig();
+  tuneIterations();
+  rebuildPosOptions(state.config.player_count);
+  state.ops = []; state.heroCards = [null, null]; state.view = null;
+  state.advice = null; state.pending = null; state.error = null;
+  refresh();
+});
+
+["cfg-sb", "cfg-bb", "cfg-ante", "cfg-stack"].forEach((id) =>
+  $("#" + id).addEventListener("change", () => {
+    state.config = {
+      player_count: state.config.player_count,
+      sb: Number($("#cfg-sb").value) || 100,
+      bb: Number($("#cfg-bb").value) || 200,
+      ante: Number($("#cfg-ante").value) || 0,
+      stack: Number($("#cfg-stack").value) || 10000,
+      stacks: null,
+    };
+    saveConfig();
+    state.ops = []; state.heroCards = [null, null]; state.view = null; state.advice = null;
+    refresh();
+  })
+);
+
+$("#cfg-pos").addEventListener("change", () => {
+  state.heroPos = $("#cfg-pos").value;   // 只换座位，手牌保留，设置顺序无关
+  state.ops = []; state.view = null; state.advice = null; state.pending = null;
+  refresh();
+});
+
+/* ---------- 渲染总入口与启动 ---------- */
+
+function renderAll() {
+  renderHeroSlots();
+  renderStackInputs();
+  renderGrid();
+  renderSeats();
+  renderBoard();
+  renderConsole();
+  renderAdvice();
+  const undoBtn = state.ops.length
+    ? `<button type="button" class="ghost-btn" data-action="undo">撤销上一步</button>`
+    : "";
+  const opsHtml = $("#ops-line").innerHTML;
+  $("#ops-line").innerHTML = opsHtml + undoBtn;
+}
+
+$("#cfg-size").value = String(state.config.player_count);
+rebuildPosOptions(state.config.player_count);
+$("#cfg-sb").value = state.config.sb;
+$("#cfg-bb").value = state.config.bb;
+$("#cfg-ante").value = state.config.ante;
+$("#cfg-stack").value = state.config.stack;
+state.gridMode = "hero";
+tuneIterations();
+renderAll();

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>牌室 · 德州扑克 MTT 决策辅助</title>
+<link rel="stylesheet" href="style.css?v=20260917e">
+</head>
+<body>
+<div class="felt-vignette" aria-hidden="true"></div>
+
+<header class="masthead">
+  <div class="masthead-rule" aria-hidden="true"></div>
+  <h1>牌&thinsp;室</h1>
+  <p class="sub">德州扑克 MTT 决策辅助 &mdash; 位置感知 · 蒙特卡洛 · 数据不出你的电脑</p>
+</header>
+
+<main id="layout">
+  <!-- 左列：设置与牌库 -->
+  <section class="col" id="col-setup">
+    <div class="panel" id="setup" aria-label="牌局设置">
+      <div class="group-title">本手设置
+        <button type="button" class="btn-reopen" id="reopen" data-action="reopen" title="筹码恢复默认并全新开局">重开</button>
+      </div>
+
+      <div class="setup-row">
+        <label>桌型
+          <select id="cfg-size">
+            <option value="6" selected>6 人桌</option>
+            <option value="8">8 人桌</option>
+            <option value="9">9 人桌</option>
+          </select>
+        </label>
+        <label>我的位置
+          <select id="cfg-pos">
+            <option>UTG</option><option>HJ</option><option>CO</option>
+            <option>BTN</option><option>SB</option><option>BB</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="setup-row">
+        <label>小盲 <input type="number" id="cfg-sb" value="100" min="1"></label>
+        <label>大盲 <input type="number" id="cfg-bb" value="200" min="1"></label>
+        <label>前注 <input type="number" id="cfg-ante" value="25" min="0"></label>
+        <label>起始筹码 <input type="number" id="cfg-stack" value="10000" min="1"></label>
+      </div>
+
+      <div class="setup-row" id="stack-row">
+        <span class="inline-label">各座位筹码 <span class="tip">（可单独改）</span></span>
+      </div>
+      <div class="stack-grid" id="stack-grid"></div>
+
+      <div class="setup-row">
+        <span class="inline-label">我的底牌</span>
+        <div class="slots" id="hero-slots"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 中列：牌桌 -->
+  <section id="col-table">
+    <div class="panel" id="table-panel" aria-label="牌桌">
+      <div id="table-oval">
+        <div id="seat-layer"></div>
+        <div id="table-logo" aria-hidden="true">♠ 牌室 ♠</div>
+        <div id="table-center">
+          <div class="pot-line">底池 <b id="pot-num">0 BB</b></div>
+          <div class="slots board" id="board-slots"></div>
+          <div class="board-caption" id="street-caption"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="deck-panel" aria-label="牌库">
+      <div class="group-title">牌库 <span class="tip">（点选底牌与公共牌，灰牌已发出）</span></div>
+      <div id="card-grid"></div>
+    </div>
+  </section>
+
+  <!-- 右列：操作台与建议 -->
+  <section class="col" id="col-right">
+    <div class="panel" id="console" aria-label="操作台">
+      <div class="group-title">操作台</div>
+      <p class="status-line" id="status-line" aria-live="polite">选好底牌后开始。</p>
+      <div id="action-area"></div>
+      <div id="board-grid-wrap" hidden>
+        <div class="group-title">点选公共牌 <span class="tip" id="board-pick-tip"></span></div>
+        <div id="board-grid"></div>
+      </div>
+      <div id="ops-line" class="ops-line"></div>
+    </div>
+
+    <div class="panel" id="advice-panel" aria-label="决策建议">
+      <div class="group-title">建议 <span class="tip" id="advice-note"></span></div>
+      <div id="advice" aria-live="polite"><p class="empty">轮到你行动时，这里给出胜率与赔率分析。</p></div>
+    </div>
+
+    <div class="panel" id="help-panel" aria-label="说明">
+      <div class="group-title">玩法</div>
+      <p class="footnote">按座位顺序录入每一家的动作；有人全下后发完公共牌即自动摊牌分池，摊牌后亮出未弃牌玩家的底牌。
+      对手的牌进行中不可见——真实德扑也是如此；建议按对手的位置和动作自动估算范围（backend/data/charts.json 可调）。
+      所有金额以大盲（BB）为单位。</p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  v2.1.9 · 仅供复盘、学习与研究 &mdash; 请勿在在线对局中作为实时辅助使用（各平台均视为作弊）。
+</footer>
+
+<script src="app.js?v=20260918b"></script>
+</body>
+</html>
