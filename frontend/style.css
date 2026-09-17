@@ -255,7 +255,18 @@ main#layout {
   background: rgba(0,0,0,.25); border: 1px solid var(--line); border-radius: 6px;
   color: var(--text); padding: 8px 10px; font-size: 14px; width: 110px;
 }
-.ops-line { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+.ops-line { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; align-items: stretch; }
+.ops-round { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 4px 0; }
+.ops-round + .ops-round, .ops-board + .ops-round { border-top: 1px dashed var(--line); }
+.round-tag {
+  font-size: 11px; color: var(--gold); border: 1px solid var(--gold-deep);
+  border-radius: 9px; padding: 1px 8px; letter-spacing: .12em; white-space: nowrap;
+}
+.ops-board { font-size: 12px; color: var(--muted); padding: 3px 0 1px; display: flex; gap: 5px; align-items: center; }
+.ops-board .cb { margin-right: 1px; }
+.cb { font-family: var(--serif); font-weight: 700; }
+.cb.red { color: #e06a5e; }
+.cb.black { color: #cfc8b6; }
 .op-chip {
   font-size: 12px; color: var(--muted); border: 1px solid var(--line);
   border-radius: 9px; padding: 2px 9px; background: rgba(0,0,0,.2);

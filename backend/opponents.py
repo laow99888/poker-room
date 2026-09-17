@@ -8,10 +8,13 @@
 
 import hashlib
 import json
+import os
+import threading
 from pathlib import Path
 
 _DATA = Path(__file__).resolve().parent / "data" / "opponents.json"
 POOL = "_pool"
+_LOCK = threading.Lock()   # 公网多人同时记录手牌时串行化读改写
 
 
 def _load() -> dict:
@@ -24,8 +27,11 @@ def _load() -> dict:
 
 
 def _save(data: dict) -> None:
+    """先写临时文件再原子替换，避免并发读到写了一半的 JSON。"""
     _DATA.parent.mkdir(parents=True, exist_ok=True)
-    _DATA.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp = _DATA.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, _DATA)
 
 
 def hand_signature(config: dict, ops: list) -> str:
@@ -42,6 +48,11 @@ def record_hand(config, ops, names: dict, intel: dict, hero_index=None) -> dict:
     names: {座位名: 对手代号}；有代名的进个人档案，其余进人群位置池。
     返回 {"recorded": bool, "names": [...], "pool": True}。
     """
+    with _LOCK:
+        return _record_hand_locked(config, ops, names, intel, hero_index)
+
+
+def _record_hand_locked(config, ops, names, intel, hero_index) -> dict:
     data = _load()
     seen = data.setdefault("_seen", [])
     sig = hand_signature(config, ops)

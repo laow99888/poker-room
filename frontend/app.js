@@ -19,7 +19,7 @@ function tuneIterations() {
   ITERATIONS = Math.max(10000, Math.round(170000 / state.config.player_count));
 }
 
-const CONFIG_KEY = "paishi_config_v1";
+const CONFIG_KEY = "paishi_config_v2";   // v2：公开上线重置一次，回到默认 6 人桌
 const NAMES_KEY = "paishi_names_v1";
 
 function loadNames() {
@@ -209,12 +209,31 @@ function renderConsole() {
   const area = $("#action-area");
   const line = $("#status-line");
   line.classList.remove("err");
-  $("#ops-line").innerHTML = state.ops.map((op, i) => {
-    const txt = op.op === "board"
-      ? `发牌 ${op.cards.join(" ")}`
-      : `${op.seat} ${ { fold: "弃牌", check: "过牌", call: "跟注", raise: `加注到 ${bb(op.to || 0)} BB`, allin: "全下" }[op.type] }`;
-    return `<span class="op-chip">${i + 1}. ${txt}</span>`;
-  }).join("") + (state.ops.length
+  // 按下注轮分组展示：每条公共牌是一条轮次的分界
+  const STREETS = ["翻牌前", "翻牌", "转牌", "河牌"];
+  const fmtCard = (c) => `<b class="cb ${IS_RED[c[1]] ? "red" : "black"}">${c[0]}${SUIT_GLYPH[c[1]]}</b>`;
+  const rounds = [];
+  let chips = [];
+  let boardCount = 0;
+  let n = 0;
+  const flush = () => {
+    if (!chips.length) return;
+    rounds.push(`<div class="ops-round"><span class="round-tag">${STREETS[boardCount] || ""}</span>${chips.join("")}</div>`);
+    chips = [];
+  };
+  state.ops.forEach((op) => {
+    if (op.op === "board") {
+      flush();
+      rounds.push(`<div class="ops-board">${STREETS[boardCount + 1] || "公共牌"} ${op.cards.map(fmtCard).join(" ")}</div>`);
+      boardCount += 1;
+    } else {
+      n += 1;
+      const txt = { fold: "弃牌", check: "过牌", call: "跟注", raise: `加注到 ${bb(op.to || 0)} BB`, allin: "全下" }[op.type];
+      chips.push(`<span class="op-chip">${n}. ${op.seat} ${txt}</span>`);
+    }
+  });
+  flush();
+  $("#ops-line").innerHTML = rounds.join("") + (state.ops.length
     ? `<button type="button" class="ghost-btn" data-action="undo">撤销上一步</button>`
     : "");
 
