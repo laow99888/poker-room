@@ -135,6 +135,7 @@ main#layout {
 }
 .grid-card:hover:not(:disabled) { transform: translateY(-2px); }
 .grid-card:disabled { opacity: .15; cursor: not-allowed; }
+.grid-card.picked { outline: 2px solid var(--gold); outline-offset: -2px; box-shadow: 0 0 0 3px rgba(211,169,76,.25); }
 .grid-card.red { color: var(--card-red); }
 .grid-card.black { color: var(--card-black); }
 

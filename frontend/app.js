@@ -83,18 +83,31 @@ function renderGrid() {
   const taken = new Set();
   if (state.view) (state.view.taken || []).forEach((c) => taken.add(c));
   state.heroCards.forEach((c) => c && taken.add(c));
-  state.boardPicks.forEach((c) => taken.add(c));
+  const boardMode = state.gridMode === "board";
+  state.boardPicks.forEach((c) => taken.add(c));   // 已选入本街的牌同样灰掉
   const html = SUITS.map((s) =>
-    RANKS.map((r) => cardBtn(r + s, false, `选择 ${r}${SUIT_NAME[s]}`)).join("")
-  ).join("");
-  const boardHtml = SUITS.map((s) =>
     RANKS.map((r) => {
       const card = r + s;
-      return cardBtn(card, taken.has(card), `选择 ${r}${SUIT_NAME[s]}`);
+      if (!boardMode) return cardBtn(card, false, `选择 ${r}${SUIT_NAME[s]}`);
+      const picked = state.boardPicks.includes(card);
+      const cls = `grid-card ${IS_RED[card[1]] ? "red" : "black"}${picked ? " picked" : ""}`;
+      const dis = taken.has(card) && !picked ? "disabled" : "";
+      return `<button type="button" class="${cls}" ${dis} data-action="card"
+        data-card="${card}" aria-label="${picked ? "已选" : "选为公共牌"} ${r}${SUIT_NAME[s]}">${card[0]}${SUIT_GLYPH[card[1]]}</button>`;
     }).join("")
   ).join("");
-  $("#card-grid").innerHTML = html;                                       // 常驻：选底牌
-  $("#board-grid").innerHTML = state.gridMode === "board" ? boardHtml : ""; // 发公共牌
+  $("#card-grid").innerHTML = html;
+}
+
+function updateDeckTip() {
+  const tip = $("#deck-tip");
+  if (!tip) return;
+  if (state.gridMode === "board") {
+    const need = STREET_DEAL[state.view.street] || 0;
+    tip.textContent = `（点选 ${need} 张公共牌：已选 ${state.boardPicks.length}/${need}，金框为已选）`;
+  } else {
+    tip.textContent = "（点选底牌与公共牌，灰牌已发出）";
+  }
 }
 
 function renderHeroSlots() {
@@ -478,10 +491,10 @@ document.addEventListener("click", (ev) => {
           state.ops.push({ op: "board", cards: state.boardPicks.slice(0, need) });
           state.boardPicks = [];
           state.gridMode = null;
-          $("#board-grid-wrap").hidden = true;
           refresh();
         } else {
           renderGrid();
+          updateDeckTip();
         }
       } else {
         const idx = state.heroCards.findIndex((c) => !c);
@@ -508,9 +521,7 @@ document.addEventListener("click", (ev) => {
     case "deal-toggle": {
       state.gridMode = state.gridMode === "board" ? null : "board";
       state.boardPicks = [];
-      $("#board-grid-wrap").hidden = state.gridMode !== "board";
-      $("#board-pick-tip").textContent = `选 ${STREET_DEAL[state.view.street]} 张`;
-      renderGrid(); renderConsole(); return;
+      renderGrid(); renderConsole(); updateDeckTip(); return;
     }
     case "do-fold": pushOp({ op: "action", type: "fold", seat: state.view.actor }); return;
     case "do-call": pushOp({ op: "action", type: state.view.to_call > 0 ? "call" : "check", seat: state.view.actor }); return;
@@ -536,7 +547,7 @@ document.addEventListener("click", (ev) => {
         fetch("/api/stats/reset", { method: "POST" }).then(() => refreshLearn());
       }
       return;
-    case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; $("#board-grid-wrap").hidden = true; refresh(); return;
+    case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; renderGrid(); updateDeckTip(); refresh(); return;
     case "reset":
       state.ops = []; state.heroCards = [null, null]; state.view = null;
       state.advice = null; state.pending = null; state.recorded = false; state.gridMode = "hero";
@@ -618,6 +629,7 @@ function renderAll() {
   renderNames();
   renderStackInputs();
   renderGrid();
+  updateDeckTip();
   renderSeats();
   renderBoard();
   renderConsole();

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>大魔丸 · 德州扑克 MTT 决策辅助</title>
-<link rel="stylesheet" href="style.css?v=20260919b">
+<link rel="stylesheet" href="style.css?v=20260919c">
 </head>
 <body>
 <div class="felt-vignette" aria-hidden="true"></div>
@@ -78,7 +78,7 @@
     </div>
 
     <div class="panel" id="deck-panel" aria-label="牌库">
-      <div class="group-title">牌库 <span class="tip">（点选底牌与公共牌，灰牌已发出）</span></div>
+      <div class="group-title">牌库 <span class="tip" id="deck-tip">（点选底牌与公共牌，灰牌已发出）</span></div>
       <div id="card-grid"></div>
     </div>
   </section>
@@ -89,10 +89,6 @@
       <div class="group-title">操作台</div>
       <p class="status-line" id="status-line" aria-live="polite">选好底牌后开始。</p>
       <div id="action-area"></div>
-      <div id="board-grid-wrap" hidden>
-        <div class="group-title">点选公共牌 <span class="tip" id="board-pick-tip"></span></div>
-        <div id="board-grid"></div>
-      </div>
       <div id="ops-line" class="ops-line"></div>
     </div>
 
@@ -121,6 +117,6 @@
   v2.3.0 · 仅供复盘、学习与研究 &mdash; 请勿在在线对局中作为实时辅助使用（各平台均视为作弊）。
 </footer>
 
-<script src="app.js?v=20260919e"></script>
+<script src="app.js?v=20260919f"></script>
 </body>
 </html>
