@@ -522,12 +522,10 @@ document.addEventListener("click", (ev) => {
           renderBoard();
           updateDeckTip();
         }
-      } else {
+      } else if (AppLogic.heroPickAllowed(state)) {
         const idx = state.heroCards.findIndex((c) => !c);
-        if (idx >= 0) state.heroCards[idx] = card;
-        else state.heroCards = [card, state.heroCards[1]];  // 满了则替换第一张
-        state.ops = []; state.view = null; state.advice = null;  // 换底牌即重开这一手
-        refresh();
+        state.heroCards[idx] = card;
+        refresh();   // 仅在底牌未选齐时生效；选满后点牌库一律忽略，防误触重开
       }
       return;
     }
@@ -675,8 +673,17 @@ function renderIcm() {
     <p class="footnote">泡沫期中短筹码的边缘牌跟注价值低于记分牌 EV，淘汰风险要计入决策。</p>`;
 }
 
+function renderZoneFocus() {
+  const zone = AppLogic.nextZone(state);
+  [["setup", "setup"], ["console", "console"], ["deck-panel", "deck"]].forEach(([id, z]) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("zone-focus", z === zone);
+  });
+}
+
 function renderAll() {
   renderIcm();
+  renderZoneFocus();
   renderHeroSlots();
   renderNames();
   renderStackInputs();

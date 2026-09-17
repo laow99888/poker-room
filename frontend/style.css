@@ -85,6 +85,8 @@ main#layout {
   padding: 18px 20px 20px;
   box-shadow: 0 10px 30px rgba(0,0,0,.35);
 }
+.panel { transition: border-color .25s, box-shadow .25s; }
+.panel.zone-focus { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold-deep), 0 0 26px rgba(211,169,76,.3); }
 .group-title {
   font-size: 13px; color: var(--gold); letter-spacing: .2em;
   margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

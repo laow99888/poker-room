@@ -31,4 +31,7 @@ jobs:
         with:
           node-version: 22
       - name: 前端 JS 语法检查
-        run: node --check frontend/app.js
+        run: |
+          node --check frontend/app.js
+          node --check frontend/logic.js
+          node --test tests/frontend/*.test.mjs

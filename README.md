@@ -66,8 +66,8 @@ backend/icm.py       ICM 奖金期望：Malmuth–Harville 子集 DP（第四层
 backend/decision.py  建议链路：情报 → 范围 → 权益 → 建议 + CFR 块
 backend/table.py     PokerKit 状态机封装（replay/校验/视图）
 backend/app.py       FastAPI：/api/hand/*、/api/stats/*、/api/equity
-frontend/            三栏单页（设置+牌库 / 牌桌 / 操作台+建议）
-tests/               78 项测试：锚点局、河牌定理、多街对账、ICM 暴力枚举对账、集成与 API
+frontend/            三栏单页（设置+牌库 / 牌桌 / 操作台+建议），logic.js 为纯规则层（点击守卫/焦点区域）
+tests/               78 项 Python 测试 + tests/frontend 前端规则测试（node --test）
 _verify_layer1.py    第一层深度推演
 _verify_layer3.py    第三层深度推演（收敛/确定性/稳定性/性能）
 _verify_layer4.py    第四层深度推演（河牌回归恒等式、转牌全枚举对账、ICM 对账、性能）
