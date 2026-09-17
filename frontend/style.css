@@ -124,6 +124,7 @@ main#layout {
 .slot.filled.red .r, .slot.filled.red .s { color: var(--card-red); }
 .slot.filled.black .r, .slot.filled.black .s { color: var(--card-black); }
 .slot.static { cursor: default; }
+.slot.pending { outline: 2px dashed var(--gold); outline-offset: -2px; opacity: .72; }
 
 #board-grid, #card-grid { display: grid; grid-template-columns: repeat(13, 1fr); gap: 5px; margin-top: 8px; }
 .grid-card {

@@ -194,9 +194,13 @@ function renderSeats() {
 
 function renderBoard() {
   const board = state.view ? state.view.board : [];
+  const preview = board.concat(state.boardPicks);   // 选牌中的牌即时上桌预览
   $("#board-slots").innerHTML = [0, 1, 2, 3, 4].map((i) => {
-    const c = board[i];
-    if (c) return `<div class="slot filled ${IS_RED[c[1]] ? "red" : "black"} static"><span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span></div>`;
+    const c = preview[i];
+    if (c) {
+      const pending = i >= board.length ? " pending" : "";
+      return `<div class="slot filled ${IS_RED[c[1]] ? "red" : "black"} static${pending}"><span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span></div>`;
+    }
     return '<div class="slot static" aria-hidden="true"></div>';
   }).join("");
 }
@@ -210,7 +214,9 @@ function renderConsole() {
       ? `发牌 ${op.cards.join(" ")}`
       : `${op.seat} ${ { fold: "弃牌", check: "过牌", call: "跟注", raise: `加注到 ${bb(op.to || 0)} BB`, allin: "全下" }[op.type] }`;
     return `<span class="op-chip">${i + 1}. ${txt}</span>`;
-  }).join("");
+  }).join("") + (state.ops.length
+    ? `<button type="button" class="ghost-btn" data-action="undo">撤销上一步</button>`
+    : "");
 
   if (!state.view) {
     if (state.error) { area.innerHTML = ""; return; }   // 保留错误提示不被覆盖
@@ -494,6 +500,7 @@ document.addEventListener("click", (ev) => {
           refresh();
         } else {
           renderGrid();
+          renderBoard();
           updateDeckTip();
         }
       } else {
@@ -521,7 +528,7 @@ document.addEventListener("click", (ev) => {
     case "deal-toggle": {
       state.gridMode = state.gridMode === "board" ? null : "board";
       state.boardPicks = [];
-      renderGrid(); renderConsole(); updateDeckTip(); return;
+      renderGrid(); renderBoard(); renderConsole(); updateDeckTip(); return;
     }
     case "do-fold": pushOp({ op: "action", type: "fold", seat: state.view.actor }); return;
     case "do-call": pushOp({ op: "action", type: state.view.to_call > 0 ? "call" : "check", seat: state.view.actor }); return;
@@ -547,7 +554,7 @@ document.addEventListener("click", (ev) => {
         fetch("/api/stats/reset", { method: "POST" }).then(() => refreshLearn());
       }
       return;
-    case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; renderGrid(); updateDeckTip(); refresh(); return;
+    case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; state.boardPicks = []; renderGrid(); renderBoard(); updateDeckTip(); refresh(); return;
     case "reset":
       state.ops = []; state.heroCards = [null, null]; state.view = null;
       state.advice = null; state.pending = null; state.recorded = false; state.gridMode = "hero";
@@ -634,11 +641,6 @@ function renderAll() {
   renderBoard();
   renderConsole();
   renderAdvice();
-  const undoBtn = state.ops.length
-    ? `<button type="button" class="ghost-btn" data-action="undo">撤销上一步</button>`
-    : "";
-  const opsHtml = $("#ops-line").innerHTML;
-  $("#ops-line").innerHTML = opsHtml + undoBtn;
 }
 
 $("#cfg-size").value = String(state.config.player_count);
