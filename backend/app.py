@@ -11,7 +11,7 @@ from . import decision, equity, opponents
 from .ranges import InvalidHandError
 from .table import TableError, replay_state
 
-app = FastAPI(title="德州扑克离线工具", docs_url=None, redoc_url=None)
+app = FastAPI(title="大魔丸 · 德州扑克离线决策辅助", docs_url=None, redoc_url=None)
 
 
 class VillainIn(BaseModel):
