@@ -2,7 +2,7 @@
 
 import pytest
 
-from backend.table import POSITIONS, TableError, replay, replay_state
+from backend.table import POSITIONS, TableError, hand_view, replay, replay_state
 
 CFG = {"sb": 100, "bb": 200, "ante": 25}
 
@@ -178,3 +178,19 @@ def test_tiny_stack_trimmed_not_crash():
     v = replay(cfg, "BTN", ["As", "Ad"], [])
     btn = next(s for s in v["seats"] if s["pos"] == "BTN")
     assert btn["stack"] == 0
+
+
+def test_taken_only_contains_observed_cards():
+    """23：不可选牌只含真实观察——烧牌玩家看不见、不得禁选；
+    占位牌与虚构摊牌牌同样不能锁死真实选牌。"""
+    cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6}
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "call", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"},
+           {"op": "action", "type": "check", "seat": "BB"}]
+    state, hero_index, dealt = replay_state(cfg, "BTN", ["As", "Ad"], ops)
+    view = hand_view(state, hero_index, dealt)
+    assert view["taken"] == sorted(["As", "Ad"])       # 翻牌前：只有两张底牌
+    assert view["simulated"] is True                    # 对手底牌为模拟占位

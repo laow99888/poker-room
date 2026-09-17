@@ -55,7 +55,8 @@ const state = {
   heroPos: "BTN",
   heroCards: [null, null],
   ops: [],
-  handId: null,          // 14：本手唯一标识（随学习记录提交，服务端按它幂等）
+  handId: AppLogic.newHandId(),   // 14/29：初始化即有 ID，首手也能幂等去重
+  unconfirmed: false,    // 26：刚提交、服务端尚未确认的最后一跳操作
   view: null,
   advice: null,
   gridMode: null,        // 'hero' | 'board'
@@ -238,8 +239,18 @@ function renderConsole() {
     ? `<button type="button" class="ghost-btn" data-action="undo">撤销上一步</button>`
     : "");
 
+  // 26：错误优先渲染——失败后的重绘不得把状态行覆盖回"轮到XX"，
+  // 并提供同快照重试入口
+  if (state.error) {
+    line.textContent = state.error;
+    line.classList.add("err");
+    area.innerHTML = `
+      <button type="button" class="primary-btn" data-action="retry">重试</button>
+      ${state.ops.length ? `<button type="button" class="ghost-btn" data-action="undo">撤销上一步</button>` : ""}`;
+    return;
+  }
+
   if (!state.view) {
-    if (state.error) { area.innerHTML = ""; return; }   // 保留错误提示不被覆盖
     line.textContent = state.heroCards.every(Boolean)
       ? "底牌已选好，正在请求本局数据…"
       : "先点下方牌面网格，选你的 2 张底牌。";
@@ -249,8 +260,10 @@ function renderConsole() {
 
   if (state.view.hand_over) {
     const pay = state.view.payoffs || {};
-    line.textContent = "手牌结束 — 各家盈亏：" +
-      Object.entries(pay).map(([p, v]) => `${p} ${v > 0 ? "+" : ""}${money(v)}`).join("，") || "无变动";
+    // 23：模拟牌局必须标明输赢来源——对手底牌是虚构占位，结果不是真实观察
+    line.textContent = "手牌结束 — " +
+      (state.view.simulated ? "对手底牌为模拟推演，以下盈亏仅供复盘参考：" : "各家盈亏：") +
+      (Object.entries(pay).map(([p, v]) => `${p} ${v > 0 ? "+" : ""}${money(v)}`).join("，") || "无变动");
     area.innerHTML = `<button type="button" class="primary-btn" data-action="reset">再来一手</button>`;
     return;
   }
@@ -305,7 +318,7 @@ function renderConsole() {
 
 async function refreshLearn() {
   try {
-    const r = await fetch("/api/stats/summary/all");
+    const r = await fetch("/api/stats/summary/all", { headers: statsHeaders() });
     const d = await r.json();
     const posStr = Object.entries(d.pool || {}).map(([p, v]) => p + ":" + v.hands).join(" · ");
     $("#learn-line").textContent =
@@ -367,13 +380,14 @@ function renderAdvice() {
     <table class="adv-table">
       <tr><td>需跟注</td><td>${a.to_call > 0 ? bb(a.to_call) + " BB" : "0（可过牌）"}</td></tr>
       <tr><td>跟注所需胜率</td><td>${a.required_eq}%</td></tr>
-      <tr><td>你的权益</td><td>${(eq.win + eq.tie / 2).toFixed(1)}%</td></tr>
+      <tr><td>你的权益</td><td>${(a.equity_share ?? eq.win + eq.tie / 2).toFixed(1)}%（含平局半分）</td></tr>
       <tr><td>跟注 EV</td><td class="${a.ev_call >= 0 ? "pos" : "neg"}">${a.ev_call >= 0 ? "+" : ""}${bb(a.ev_call)} BB</td></tr>
       <tr><td>SPR</td><td>${rec.spr ?? "—"}${rec.spr_note ? " · " + rec.spr_note : ""}</td></tr>
       <tr><td>M 值</td><td>${(a.m_value !== null && a.m_value !== undefined) ? a.m_value : "—"}</td></tr>
     </table>
     <div class="range-list">${a.opponents.map((o) => {
-      const name = o.name ? `<b>${o.name}</b>（${o.pos}）` : `<b>${o.pos}</b>`;
+      const safeName = o.name ? AppLogic.escapeHtml(o.name) : "";
+      const name = o.name ? `<b>${safeName}</b>（${o.pos}）` : `<b>${o.pos}</b>`;
       const stat = o.stats && o.stats.hands >= 5
         ? ` · VPIP ${o.stats.vpip_pct}% / PFR ${o.stats.pfr_pct}%` : "";
       const narrow = o.narrowed ? " · 范围已按 PFR 收窄" : "";
@@ -435,9 +449,15 @@ function pushOp(op) {
   if (op.op === "board" && state.view && state.view.actor) return;
   state.error = null;
   state.ops.push(op);
+  state.unconfirmed = true;  // 26：这一跳刚提交、尚未被服务端确认
   state.busy = true;         // 点击即刻禁用操作按钮，不等网络返回（防连点）
   renderConsole();
   refreshCore();
+}
+
+// 27：学习数据请求统一携带匿名用户 ID
+function statsHeaders() {
+  return { "X-Player-Id": AppLogic.playerId() };
 }
 
 async function refresh(retries = 0) {
@@ -448,43 +468,55 @@ async function refresh(retries = 0) {
 }
 
 async function refreshCore(retries = 0) {
+  // 25：代次守卫——请求发出后只要重开/换了手牌（handId 变化），
+  // 本次响应无论成败都不得写入状态，也不得触动 busy/pending
+  const hid = state.handId;
+  const stale = () => state.handId !== hid;
   try {
     const r = await fetch("/api/hand/view", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload()),
     });
+    if (stale()) return;
     const data = await r.json();
     if (!r.ok) {
-      // 10：只有"该步非法"(400) 才撤销自愈；服务/网络故障必须保留历史
-      if (AppLogic.shouldRollbackOn(r.status) && state.ops.length > 0 && retries < 3) {
+      // 26：只回滚"刚提交、未被确认"的最后一步（400 也可能源于配置或
+      // 更早的步骤，绝不允许猜测性连环删除合法历史）
+      if (AppLogic.shouldRollbackOn(r.status) && state.unconfirmed
+          && state.ops.length > 0) {
+        state.unconfirmed = false;
         state.ops.pop();
         state.busy = false;
-        return refreshCore(retries + 1);
+        showError((data.detail || `最后一步无效，已撤销`) + "（可修正后重试）");
+        renderAll();
+        return refreshCore(1);   // 恢复到撤销后的合法视图；再次失败不再回滚
       }
-      if (r.status === 400) {
-        showError((data.detail || `请求失败（${r.status}）`) + "（可点「撤销上一步」回退）");
-      } else {
-        showError(`服务暂不可用（${r.status}）——你的操作记录已保留，稍后重试即可`);
-      }
+      showError(r.status === 400
+        ? ((data.detail || `请求失败（${r.status}）`) + "（可点「撤销上一步」回退）")
+        : `服务暂不可用（${r.status}）——你的操作记录已保留，稍后重试即可`);
       state.busy = false;
       renderAll();
       return;
     }
     state.error = null;
+    state.unconfirmed = false;
     state.view = data;
     state.advice = null;
     state.busy = false;
     if (data.hand_over && !state.recorded) {
-      // 04：只有服务确认入库才算已记录；失败保留状态并明示，允许后续重试
+      // 04/22：记录确认绑定本手 handId——迟到的 200 不得把新手标为已记录
       fetch("/api/stats/record", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...statsHeaders() },
         body: JSON.stringify(payload()),
       }).then((rr) => {
-        if (rr.ok) {
+        if (!rr.ok) {
+          showError("学习数据记录失败（服务未确认），本手可能未计入统计");
+          return;
+        }
+        if (state.handId === hid) {
           state.recorded = true;
           refreshLearn();
-        } else {
-          showError("学习数据记录失败（服务未确认），本手可能未计入统计");
         }
       }).catch(() => showError("学习数据记录失败（网络异常），本手可能未计入统计"));
     }
@@ -495,21 +527,21 @@ async function refreshCore(retries = 0) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload()),
       });
-      if (r2.ok) {
-        const advice = (await r2.json()).advice;
-        // 09：等待期间牌局变了（撤销/重开/又走了一步），旧响应必须丢弃
-        if (AppLogic.sameHand(snap, AppLogic.handKey(state))) {
-          state.advice = advice;
-          renderAdvice();
-        }
+      // 09/25：等待期间牌局变了（撤销/重开/又走了一步），旧响应必须丢弃；
+      // handKey 相同但 handId 不同的两手（同牌同座位同步数）也靠代次区分
+      if (r2.ok && !stale()
+          && AppLogic.sameHand(snap, AppLogic.handKey(state))) {
+        state.advice = (await r2.json()).advice;
+        renderAdvice();
       }
     }
   } catch (_) {
+    if (stale()) return;
     state.busy = false;
     showError("无法连接本机服务 — 请确认服务正在运行");
     renderAll();
   }
-  if (state.pending) {
+  if (!stale() && state.pending) {
     const op = state.pending;
     state.pending = null;
     pushOp(op);
@@ -547,17 +579,16 @@ document.addEventListener("click", (ev) => {
       }
       return;
     }
-    case "hero-pick": {
-      const idx = Number(btn.dataset.idx);
-      if (state.heroCards[idx]) {
-        state.heroCards[idx] = null;
-        state.ops = []; state.view = null; state.advice = null;
-      }
-      refresh(); return;
-    }
+    case "hero-pick":
     case "hero-clear": {
-      state.heroCards[Number(btn.dataset.idx)] = null;
-      state.ops = []; state.view = null; state.advice = null;
+      // 28：清底牌走统一状态迁移——旧实现只清 ops/view/advice，
+      // 残留 gridMode='board' 会让下一次点牌库走进公共牌分支而崩溃
+      const idx = Number(btn.dataset.idx);
+      if (!state.heroCards[idx]) return;   // 点空槽无动作（原语义）
+      const kept = state.heroCards[1 - idx];
+      resetHandState();
+      state.heroCards = [null, null];
+      if (kept) state.heroCards[1 - idx] = kept;   // 保留另一张已选底牌
       refresh(); return;
     }
     case "deal-toggle": {
@@ -585,11 +616,13 @@ document.addEventListener("click", (ev) => {
       refresh();
       return;
     case "stats-reset":
-      if (confirm("确定清空全部学习数据？")) {
-        fetch("/api/stats/reset", { method: "POST" }).then(() => refreshLearn());
+      if (confirm("确定清空学习数据？（公开模式下只清你自己的数据）")) {
+        fetch("/api/stats/reset", { method: "POST", headers: statsHeaders() })
+          .then(() => refreshLearn());
       }
       return;
-    case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; state.boardPicks = []; renderGrid(); renderBoard(); updateDeckTip(); refresh(); return;
+    case "undo": state.ops.pop(); state.unconfirmed = false; state.pending = null; state.gridMode = null; state.boardPicks = []; renderGrid(); renderBoard(); updateDeckTip(); refresh(); return;
+    case "retry": state.error = null; refresh(); return;   // 26：同快照重试
     case "reset":
       resetHandState();
       state.gridMode = "hero";
@@ -692,9 +725,11 @@ function resetHandState({ keepCards = false } = {}) {
   state.ops = [];
   if (!keepCards) state.heroCards = [null, null];
   state.handId = AppLogic.newHandId();   // 14：每手新手牌一个新 id
+  state.unconfirmed = false;             // 26：旧手的待确认标记随之作废
   state.view = null; state.advice = null; state.pending = null;
   state.error = null; state.gridMode = null; state.boardPicks = [];
   state.recorded = false;
+  state.busy = false;   // 25：旧请求的响应将因 handId 不匹配被丢弃，放行新请求
 }
 
 function renderZoneFocus() {

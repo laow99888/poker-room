@@ -1,12 +1,13 @@
 """本地 FastAPI 应用：/api/equity + /api/hand/* + 静态前端，全程离线（绑定 127.0.0.1）。"""
 
+import math
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from . import decision, equity, opponents
 from .icm import ICMError, icm_equities
@@ -38,6 +39,15 @@ class HandConfigIn(BaseModel):
     ante: int = 0
     stacks: Optional[List[int]] = None
     payouts: List[float] = []   # 决赛桌奖金结构（可选），如 [500, 300, 200]
+
+    @field_validator("payouts")
+    @classmethod
+    def _finite_payouts(cls, v):
+        # 31：奖金必须是有限数值，Infinity/NaN 会让 ICM 计算产生 500
+        for p in v:
+            if not math.isfinite(p):
+                raise ValueError(f"奖金必须为有限数值，收到 {p!r}")
+        return v
 
 
 def _dump(v) -> dict:
@@ -76,7 +86,7 @@ class HandIn(BaseModel):
     ops: List[dict] = []
     iterations: int = 50_000
     seed: Optional[int] = None
-    names: dict = {}        # 座位 → 对手代号（用于累计统计）
+    names: Dict[str, str] = {}      # 31：座位 → 对手代号，值必须是字符串
     hand_id: Optional[str] = None   # 前端生成的手牌唯一标识（14：记录幂等键）
 
 
@@ -134,7 +144,7 @@ def hand_view_api(payload: HandIn):
 
 
 @app.post("/api/hand/advice")
-def hand_advice_api(payload: HandIn):
+def hand_advice_api(payload: HandIn, request: Request):
     if not 1_000 <= payload.iterations <= 1_000_000:
         raise HTTPException(400, "模拟次数需在 1,000 到 1,000,000 之间")
     state, hero_index, dealt = _replay_or_400(payload)
@@ -147,14 +157,21 @@ def hand_advice_api(payload: HandIn):
         raise HTTPException(400, f"还没轮到你行动（当前：{view['actor'] or '需要发牌'}）")
     try:
         advice = decision.advice_for(state, hero_index, payload.iterations,
-                                     payload.seed, payload.names)
+                                     payload.seed, payload.names,
+                                     uid=_player_id(request))
     except TableError as exc:
         raise HTTPException(400, str(exc))
     return {**view, "advice": advice}
 
 
+def _player_id(request: Request) -> str:
+    """匿名用户命名空间（27）：前端生成的随机 ID，仅用于隔离数据归属，
+    不是身份认证；缺失或非法回退 "local"（本地单人模式）。"""
+    return opponents._clean_uid(request.headers.get("X-Player-Id"))
+
+
 @app.post("/api/stats/record")
-def stats_record_api(payload: HandIn):
+def stats_record_api(payload: HandIn, request: Request):
     """手牌结束后调用：把本手计入对手档案（按 hand_id/签名去重，可安全重复提交）。"""
     state, hero_index, _ = _replay_or_400(payload)
     if state.status:
@@ -162,31 +179,38 @@ def stats_record_api(payload: HandIn):
     intel = decision.player_intel(state)
     result = opponents.record_hand(_config_dump(payload.config), payload.ops,
                                    payload.names, intel, hero_index=hero_index,
-                                   hand_id=payload.hand_id)
+                                   hand_id=payload.hand_id,
+                                   uid=_player_id(request))
     return {"recorded": result}
 
 
 @app.get("/api/stats/{name}")
-def stats_get_api(name: str):
-    return opponents.get_stats(name)
+def stats_get_api(name: str, request: Request):
+    return opponents.get_stats(name, uid=_player_id(request))
 
 
 @app.post("/api/stats/reset")
 def stats_reset_api(request: Request):
-    # 11：本地工具模式随便用；公开部署时仅允许本机或持 POKER_ADMIN_TOKEN 的调用
-    client = request.client.host if request.client else ""
+    """27：清空范围由部署模式决定，不依赖 client host 判断——
+    Nginx 反代下所有请求的来源地址都是 127.0.0.1，按地址放行等于向
+    公网开放全清。
+    - 未配置 POKER_ADMIN_TOKEN：本地单人模式，重置=全清（兼容原行为）；
+    - 已配置：公开多人模式，重置只清当前用户自己的数据；
+      持 X-Admin-Token 才能全清（所有用户+人群池）。
+    公开部署必须设置 POKER_ADMIN_TOKEN。
+    """
     token = os.environ.get("POKER_ADMIN_TOKEN", "")
-    if client not in ("127.0.0.1", "::1", "testclient") and not (
-            token and request.headers.get("X-Admin-Token") == token):
-        raise HTTPException(403, "公开部署下重置学习数据需要管理令牌（X-Admin-Token）")
-    opponents.reset_all()
-    return {"reset": True}
+    if not token or request.headers.get("X-Admin-Token") == token:
+        opponents.reset_all()
+        return {"reset": "all"}
+    opponents.reset_user(_player_id(request))
+    return {"reset": "user"}
 
 
 @app.get("/api/stats/summary/all")
-def stats_summary_api():
-    """学习进度：人群池按位置的样本量 + 具名档案列表。"""
-    data = opponents.summary()
+def stats_summary_api(request: Request):
+    """学习进度：共享人群池按位置的样本量 + 当前用户的具名档案列表。"""
+    data = opponents.summary(uid=_player_id(request))
     return data
 
 

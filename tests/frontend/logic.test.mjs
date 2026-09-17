@@ -53,7 +53,7 @@ test("行动阶段与手牌结束 → 操作台", () => {
 // 10：失败回滚规则——只有"校验失败"(400) 才允许撤销已录操作；
 // 服务/网络故障（5xx 等）必须保留历史，否则连删三部合法动作。
 import "../../frontend/logic.js";
-const { shouldRollbackOn, sameHand } = globalThis.AppLogic;
+const { shouldRollbackOn, sameHand, handKey, playerId } = globalThis.AppLogic;
 
 test("只有 400 触发撤销自愈，5xx/网络失败保留历史", () => {
   assert.equal(shouldRollbackOn(400), true);
@@ -62,12 +62,32 @@ test("只有 400 触发撤销自愈，5xx/网络失败保留历史", () => {
   assert.equal(shouldRollbackOn(undefined), false);
 });
 
-// 09：建议响应归属校验——请求发出后牌局变了（撤销/重开/继续操作），旧响应必须丢弃
-test("sameHand 判定响应是否仍属于当前牌局", () => {
-  assert.equal(sameHand(null, { opsLen: 0 }), false);
-  assert.equal(sameHand({ opsLen: 3, handKey: "AsKs|BTN" }, { opsLen: 3, handKey: "AsKs|BTN" }), true);
-  assert.equal(sameHand({ opsLen: 3, handKey: "AsKs|BTN" }, { opsLen: 4, handKey: "AsKs|BTN" }), false);
-  assert.equal(sameHand({ opsLen: 3, handKey: "AsKs|BTN" }, { opsLen: 3, handKey: "QdQc|BTN" }), false);
+// 09/25：建议响应归属校验——必须走真实调用契约 sameHand(handKey(a), handKey(b))。
+// 旧测试手工拼 {opsLen, handKey} 对象掩盖了"handKey 返回 string 而比较读属性"
+// 的契约错配（任何两个响应都被判为同一手牌）。
+test("sameHand 判定响应是否仍属于当前牌局（真实 handKey 契约）", () => {
+  const key = (cards, pos, opsLen) =>
+    handKey({ heroCards: cards, heroPos: pos, ops: Array(opsLen).fill({}) });
+  assert.equal(sameHand(undefined, key(["As", "Ks"], "BTN", 0)), false);
+  assert.equal(
+    sameHand(key(["As", "Ks"], "BTN", 3), key(["As", "Ks"], "BTN", 3)), true);
+  assert.equal(
+    sameHand(key(["As", "Ks"], "BTN", 3), key(["As", "Ks"], "BTN", 4)), false);
+  assert.equal(
+    sameHand(key(["As", "Ks"], "BTN", 3), key(["Qd", "Qc"], "BTN", 3)), false);
+  assert.equal(
+    sameHand(key(["As", "Ks"], "BTN", 3), key(["As", "Ks"], "CO", 3)), false);
+});
+
+// 27：匿名用户 ID——持久、稳定、不可用时回退 local
+test("playerId 持久化并在无存储时回退", () => {
+  const mem = new Map();
+  const store = { getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+                  setItem: (k, v) => mem.set(k, v) };
+  const a = playerId(store);
+  assert.ok(a && typeof a === "string");
+  assert.equal(playerId(store), a);        // 同一存储返回同一 ID
+  assert.equal(playerId(null), "local");
 });
 
 // 14：每手新手牌唯一标识——内容相同的两手独立牌局靠它区分

@@ -56,7 +56,11 @@ def analyze_board(board) -> dict:
 
 
 def range_equity(hero_combos, villain_combos, board, iterations=3000, seed=None):
-    """双方范围在当前牌面上的平均权益（hero 侧百分比，含一半平分）。"""
+    """双方范围在当前牌面上的平均权益（hero 侧百分比，含一半平分）。
+
+    32：双方实体牌交集的组合对不可能同时出现，采样时跳过；
+    过滤后没有任何合法组合对时返回 None（不可评估）。
+    """
     rng = random.Random(seed)
     board = list(board)
     need = 5 - len(board)
@@ -76,6 +80,9 @@ def range_equity(hero_combos, villain_combos, board, iterations=3000, seed=None)
         v = vc[rng.randrange(len(vc))]
         # 与公共牌冲突的组合不可能成立，跳过
         if h[0] in board_set or h[1] in board_set or v[0] in board_set or v[1] in board_set:
+            continue
+        # 32：双方共享实体牌的组合对不可能成立，跳过
+        if set(h) & set(v):
             continue
         avail = [c for c in _ALL if c not in (h[0], h[1], v[0], v[1]) and c not in board]
         extra = rng.sample(avail, need)

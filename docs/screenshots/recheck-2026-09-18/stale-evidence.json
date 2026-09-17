@@ -1,0 +1,20 @@
+{
+  "reset": {
+    "cards": [
+      null,
+      null
+    ],
+    "view": null,
+    "hasAdvice": false,
+    "busy": false
+  },
+  "after": {
+    "cards": [
+      null,
+      null
+    ],
+    "view": null,
+    "hasAdvice": false,
+    "text": "轮到你行动时，这里给出胜率与赔率分析。"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "before": {
+    "cards": [
+      null,
+      null
+    ],
+    "view": null,
+    "advice": false
+  },
+  "after": {
+    "cards": [
+      null,
+      null
+    ],
+    "view": null,
+    "advice": true,
+    "note": "RECHECK_OLD_RESPONSE"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "initialHandId": null,
+  "clearDuringBoard": {
+    "gridMode": "board",
+    "heroCards": [
+      null,
+      "Ad"
+    ],
+    "view": null,
+    "boardPicks": [
+      "2c"
+    ]
+  },
+  "errors": [
+    "Cannot read properties of null (reading 'street')"
+  ],
+  "sameHandStrings": true,
+  "staleAfterReopen": {
+    "heroCards": [
+      null,
+      null
+    ],
+    "view": null,
+    "hasAdvice": false
+  },
+  "nameInjection": {
+    "executed": 1,
+    "shareRow": "你的权益50.0%"
+  }
+}

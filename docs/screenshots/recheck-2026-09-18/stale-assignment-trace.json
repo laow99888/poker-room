@@ -1,0 +1,20 @@
+{
+  "logs": [
+    {
+      "set": false,
+      "stack": "Error\n    at Object.set [as advice] (pptr:evaluate;file%3A%2F%2F%2FC%3A%2FUsers%2FAdministrator%2F.codex%2Fskills%2Fchrome-devtools%2Fscripts%2F%5Beval1%5D%3A6%3A10:3:102)\n    at refreshCore (http://127.0.0.1:8876/app.js?v=20260921a:475:18)"
+    },
+    {
+      "set": false,
+      "stack": "Error\n    at Object.set [as advice] (pptr:evaluate;file%3A%2F%2F%2FC%3A%2FUsers%2FAdministrator%2F.codex%2Fskills%2Fchrome-devtools%2Fscripts%2F%5Beval1%5D%3A6%3A10:3:102)\n    at resetHandState (http://127.0.0.1:8876/app.js?v=20260921a:695:35)\n    at HTMLDocument.<anonymous> (http://127.0.0.1:8876/app.js?v=20260921a:583:7)"
+    },
+    {
+      "set": false,
+      "stack": "Error\n    at Object.set [as advice] (pptr:evaluate;file%3A%2F%2F%2FC%3A%2FUsers%2FAdministrator%2F.codex%2Fskills%2Fchrome-devtools%2Fscripts%2F%5Beval1%5D%3A6%3A10:3:102)\n    at refreshCore (http://127.0.0.1:8876/app.js?v=20260921a:502:24)\n    at async pptr:evaluate;file%3A%2F%2F%2FC%3A%2FUsers%2FAdministrator%2F.codex%2Fskills%2Fchrome-devtools%2Fscripts%2F%5Beval1%5D%3A14%3A10:1:32"
+    }
+  ],
+  "c": [
+    null,
+    null
+  ]
+}

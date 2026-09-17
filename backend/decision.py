@@ -61,9 +61,14 @@ def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos
         if actual_added:
             hero_range.append(actual)
 
+        # 21：引擎层面没有加注权（如对手已全下，min/max_raise_to 为 None）时
+        # 明确禁用 raise 分支——不允许骨架输出物理上非法的加注策略
+        can_raise = state.max_completion_betting_or_raising_to_amount is not None
+
         res = cfr_mod.solve_street(board, hero_range, villain_combos,
                                    money=money, bet_sizes=(0.5, 1.0),
-                                   buckets=8, iterations=1600, keep=[actual])
+                                   buckets=8, iterations=1600, keep=[actual],
+                                   allow_raise=can_raise)
 
         idx = next(i for i, c in enumerate(res["hero_combos"])
                    if frozenset(c) == frozenset(actual))
@@ -307,7 +312,8 @@ def _mix_no_bet(eff, spr, opponent_count):
 def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponent_count,
                           range_adv_val=None):
     """把权益与底池赔率翻译成带概率的行动建议。"""
-    eff = eq["win"] + eq["tie"] / 2
+    # 24：用含平局半分的真实份额，不用 win+tie/2 —— 多家平分时它会高估
+    eff = eq.get("equity", eq["win"] + eq["tie"] / 2)
     eff_stack = state.get_effective_stack(hero_index)
     spr = round(eff_stack / pot, 1) if pot > 0 else None
     bb = state.blinds_or_straddles[1]
@@ -424,26 +430,37 @@ def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponen
     }
 
 
-def _eligible_pot(state, hero_index: int, to_call: int) -> int:
-    """英雄跟注后有权争夺的底池（短码边池感知）。
+def _side_pots(state, hero_index: int, to_call: int):
+    """把"英雄跟注后可争夺的池"按投入层级分解（24）。
 
-    每个对手（含已弃牌者，他们的钱仍在池里）最多只能被赢走
-    min(其已投入, 英雄跟注后的总投入)；超出部分在更深筹码的边池里，
-    英雄根本无权染指。06：跟注赔率与 EV 都必须用这个口径。
+    返回 (layers, hero_total)：每层为 dict(amount=该层总额（含英雄与死钱
+    的切片）, seats=能与英雄争夺该层的对手座位)。对手投入超过英雄跟注后
+    总投入的部分在英雄够不到的更深层，不计入。弃牌死钱落在最浅层。
     """
     start = state.starting_stacks
-    contrib = {i: max(0, start[i] - state.stacks[i]) for i in range(state.player_count)}
+    n = state.player_count
+    contrib = [max(0, start[i] - state.stacks[i]) for i in range(n)]
     hero_total = contrib[hero_index] + to_call
-    eligible = 0
-    for i in range(state.player_count):
-        if i == hero_index:
+    levels = sorted({min(contrib[i], hero_total) for i in range(n)
+                     if i != hero_index and contrib[i] > 0})
+    layers = []
+    prev = 0
+    for lv in levels:
+        if lv <= prev:
             continue
-        eligible += min(contrib[i], hero_total)
-    return eligible
+        amount = min(hero_total - prev, lv - prev) + sum(
+            min(max(contrib[i] - prev, 0), lv - prev)
+            for i in range(n) if i != hero_index)
+        seats = [i for i in range(n)
+                 if i != hero_index and contrib[i] >= lv]
+        layers.append({"amount": amount, "seats": seats})
+        prev = lv
+    return layers, hero_total
 
 
-def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -> dict:
-    """计算英雄当前决策建议（必须轮到英雄行动）。"""
+def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
+               uid="local") -> dict:
+    """计算英雄当前决策建议（必须轮到英雄行动）。uid 用于隔离对手档案。"""
     if state.status is False:
         raise TableError("这手牌已经结束")
     if state.actor_index != hero_index:
@@ -457,6 +474,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
 
     opponents = []
     villains = []
+    villain_seats = []
     names = names or {}
     for i in range(state.player_count):
         if i == hero_index or not state.statuses[i]:
@@ -465,7 +483,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
         line = intel[i]["line"]
         codes, combos, label = _range_for(pos, line)
         name = (names.get(pos) or "").strip()
-        stats = opponents_mod.get_stats(name) if name else None
+        stats = opponents_mod.get_stats(name, uid=uid) if name else None
         pool = opponents_mod.get_pool(pos)
         narrowed = False
         keep_frac = 1.0
@@ -499,15 +517,38 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
         if combos:
             villains.append({"type": "combos",
                              "combos": [[a, b] for a, b in combos]})
+            villain_seats.append(i)
 
     eq = equity.simulate(hero_cards, villains, board, iterations, seed=seed)
 
     to_call = state.checking_or_calling_amount
     pot = state.total_pot_amount
-    eligible = _eligible_pot(state, hero_index, to_call)
-    required = round(to_call * 100 / (eligible + to_call), 2) if to_call > 0 else 0.0
+    # 24：赔率与 EV 一律用"跟注相对弃牌"的增量口径——弃牌时自己在池里的
+    # 钱是放弃争夺的代价，不能从可赢池里扣掉（补盲 100/400 门槛是 25%，
+    # 不是 33.33%）。多层池时逐层用该层对手集合估算权益再分配收益，
+    # 避免"总体权益 0% 但边池必胜"的方向性错误。
+    layers, hero_total = _side_pots(state, hero_index, to_call)
+    required = round(to_call * 100 / (pot + to_call), 2) if to_call > 0 else 0.0
     eff = eq.get("equity", eq["win"] + eq["tie"] / 2)
-    ev_call = round(eff / 100 * (eligible + to_call) - to_call, 2)
+    ev_call = -float(to_call)
+    pot_rows = []
+    for layer in layers:
+        layer_villains = [villains[k] for k, seat in enumerate(villain_seats)
+                          if seat in layer["seats"]]
+        if not layer_villains:
+            layer_eq = 100.0        # 该层只剩死钱可白拿
+        elif len(layer_villains) == len(villains):
+            layer_eq = eff          # 与总体同一对手集合，不重复模拟
+        else:
+            sub = equity.simulate(hero_cards, layer_villains, board,
+                                  max(3000, iterations // 4), seed=seed)
+            layer_eq = sub["equity"]
+        ev_call += layer_eq / 100.0 * layer["amount"]
+        pot_rows.append({"amount": layer["amount"],
+                         "seats": [positions[i] for i in layer["seats"]],
+                         "equity": layer_eq})
+    ev_call = round(ev_call, 2)
+    equity_share = round(eff, 2)
 
     bb = state.blinds_or_straddles[1]
     ante = state.antes[0]
@@ -539,11 +580,13 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
 
     return {
         "equity": eq,
+        "equity_share": equity_share,
         "opponents": opponents,
         "to_call": to_call,
         "pot": pot,
         "required_eq": required,
         "ev_call": ev_call,
+        "side_pots": pot_rows,
         "min_raise_to": state.min_completion_betting_or_raising_to_amount,
         "max_raise_to": state.max_completion_betting_or_raising_to_amount,
         "effective_stack": int(state.get_effective_stack(hero_index)),

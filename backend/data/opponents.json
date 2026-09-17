@@ -1,10 +1,7 @@
 {
- "_seen": [
-  "cd99a16b9c814ba6"
- ],
  "_pool_pos": {
   "SB": {
-   "hands": 1,
+   "hands": 2,
    "opens": 0,
    "limps": 0,
    "threebets": 0,
@@ -12,7 +9,7 @@
    "fold_raise": 0
   },
   "UTG": {
-   "hands": 1,
+   "hands": 2,
    "opens": 0,
    "limps": 0,
    "threebets": 0,
@@ -20,7 +17,7 @@
    "fold_raise": 0
   },
   "HJ": {
-   "hands": 1,
+   "hands": 2,
    "opens": 0,
    "limps": 0,
    "threebets": 0,
@@ -28,7 +25,7 @@
    "fold_raise": 0
   },
   "CO": {
-   "hands": 1,
+   "hands": 2,
    "opens": 0,
    "limps": 0,
    "threebets": 0,
@@ -42,6 +39,14 @@
    "threebets": 0,
    "call_raise": 0,
    "fold_raise": 0
+  },
+  "BB": {
+   "hands": 1,
+   "opens": 0,
+   "limps": 0,
+   "threebets": 0,
+   "call_raise": 0,
+   "fold_raise": 0
   }
  },
  "_pool": {
@@ -49,5 +54,14 @@
   "vpip": 0,
   "pfr": 0,
   "threebet": 0
+ },
+ "users": {
+  "local": {
+   "named": {},
+   "_hand_ids": [
+    "cd99a16b9c814ba6",
+    "188e2fddb94044e3"
+   ]
+  }
  }
 }

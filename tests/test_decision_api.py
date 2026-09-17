@@ -109,9 +109,9 @@ def test_api_advice_pot_odds_math():
     # 翻牌互相过牌；转牌 BB 过牌、BTN 下注 1000 → BB 需跟 1000
     assert adv["to_call"] == 1000
     assert adv["pot"] == 1450 + 1000
-    # 边池感知口径：BB 只能赢别人的钱（BTN 匹配 1625 + 死钱 200），
-    # 自己之前的投入不是奖励。所需 = 1000/(1825+1000) = 35.4%
-    assert adv["required_eq"] == round(1000 * 100 / 2825, 2)
+    # 24：相对弃牌的增量口径——跟注花 1000，争的是跟注后总池 3450
+    # （含自己已投入的部分：弃牌即放弃对它的争夺）。1000/3450 = 28.99%
+    assert adv["required_eq"] == round(1000 * 100 / 3450, 2)
 
 
 def test_nine_max_advice_with_spr_and_recommendation():
@@ -257,10 +257,10 @@ def test_advice_invariants_random_scenarios():
                 rec = adv["recommendation"]
                 eq = adv["equity"]
                 assert abs(eq["win"] + eq["tie"] + eq["lose"] - 100) <= 0.02
-                # 新口径由后端内部按可赢底池计算，这里只验证区间合理性
+                # 24：恢复独立数学基准——相对弃牌口径的精确赔率
                 if adv["to_call"] > 0:
-
-                    assert 0 < adv["required_eq"] <= 100
+                    assert adv["required_eq"] == round(
+                        adv["to_call"] * 100 / (adv["pot"] + adv["to_call"]), 2)
                 pcts = [m["pct"] for m in rec["mix"]]
                 assert pcts == sorted(pcts, reverse=True)
                 assert all(0 <= p <= 100 for p in pcts)
@@ -308,3 +308,92 @@ def test_icm_allin_player_not_an_error():
     icm = v["icm"]
     assert "error" not in icm
     assert {r["stack"] for r in icm["rows"]} == {10000, 800}   # 手前快照原值
+
+
+def test_blind_up_required_eq_uses_incremental_odds():
+    """24：补盲是"相对弃牌"的增量决策——SB 已投 100 在池里，跟 100
+    争的是跟注后总池 400，门槛 25%（不是 33.33%）。"""
+    cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6}
+    payload = {"config": cfg, "hero_pos": "SB",
+               "hero_cards": ["7c", "8d"],
+               "ops": [{"op": "action", "type": "fold", "seat": "UTG"},
+                       {"op": "action", "type": "fold", "seat": "HJ"},
+                       {"op": "action", "type": "fold", "seat": "CO"},
+                       {"op": "action", "type": "fold", "seat": "BTN"}]}
+    r = client.post("/api/hand/advice", json=payload)
+    assert r.status_code == 200
+    adv = r.json()["advice"]
+    assert adv["to_call"] == 100 and adv["pot"] == 300
+    assert adv["required_eq"] == 25.0
+    assert adv["equity_share"] > 0
+    assert adv["side_pots"] and adv["side_pots"][0]["amount"] == 400
+
+
+def test_cfr_no_raise_when_opponent_allin():
+    """21：对手全下（引擎 min/max_raise_to=None）时，CFR 建议不得含加注。"""
+    cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6}
+    payload = {"config": cfg, "hero_pos": "BTN", "hero_cards": ["As", "Ad"],
+               "iterations": 20000,
+               "ops": [{"op": "action", "type": "fold", "seat": "UTG"},
+                       {"op": "action", "type": "fold", "seat": "HJ"},
+                       {"op": "action", "type": "fold", "seat": "CO"},
+                       {"op": "action", "type": "call", "seat": "BTN"},
+                       {"op": "action", "type": "fold", "seat": "SB"},
+                       {"op": "action", "type": "check", "seat": "BB"},
+                       {"op": "board", "cards": ["2c", "3d", "7h"]},
+                       {"op": "action", "type": "check", "seat": "BB"},
+                       {"op": "action", "type": "check", "seat": "BTN"},
+                       {"op": "board", "cards": ["9c"]},
+                       {"op": "action", "type": "check", "seat": "BB"},
+                       {"op": "action", "type": "check", "seat": "BTN"},
+                       {"op": "board", "cards": ["Td"]},
+                       {"op": "action", "type": "allin", "seat": "BB"}]}
+    r = client.post("/api/hand/advice", json=payload)
+    assert r.status_code == 200
+    adv = r.json()["advice"]
+    assert adv["min_raise_to"] is None and adv["max_raise_to"] is None
+    if adv["cfr"]["supported"]:
+        actions = {m["action"] for m in adv["cfr"]["mix"]}
+        assert "raise" not in actions
+        assert actions <= {"fold", "call", "check"}
+
+
+def test_equity_lowercase_range_same_as_upper():
+    """20：API 层大小写等价（除耗时字段外逐项一致）。"""
+    base = {"hero": ["As", "Ah"], "villains": [{"type": "range", "text": "KK"}],
+            "board": ["2c", "3d", "7h", "9c", "Td"],
+            "iterations": 2000, "seed": 42}
+    r1 = client.post("/api/equity", json=base)
+    base["villains"][0]["text"] = "kk"
+    r2 = client.post("/api/equity", json=base)
+    assert r1.status_code == r2.status_code == 200
+    d1, d2 = r1.json(), r2.json()
+    d1.pop("elapsedMs"), d2.pop("elapsedMs")
+    assert d1 == d2
+
+
+def test_invalid_names_and_payouts_are_4xx():
+    """31：names 值必须为字符串（422）；保留前缀归为无名安全降级；
+    非有限奖金 422 而不是 500。"""
+    cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6}
+    # 全弃短牌谱：手牌即结束，回放不含公共牌维度
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"}]
+    r = client.post("/api/stats/record", json={"config": cfg, "hero_pos": "BB",
+                   "hero_cards": ["As", "Ad"], "ops": ops, "names": {"BB": 123}})
+    assert r.status_code == 422
+    r2 = client.post("/api/stats/record", json={"config": cfg, "hero_pos": "BB",
+                      "hero_cards": ["As", "Ad"], "ops": ops,
+                      "names": {"BB": "_seen"}})
+    assert r2.status_code == 200       # 保留前缀安全降级为无名
+    r3 = client.post("/api/hand/view", json={"config": {
+        "sb": 100, "bb": 200, "payouts": ["Infinity", 300]},
+        "hero_pos": "BTN", "hero_cards": ["As", "Ad"], "ops": []})
+    assert r3.status_code == 422
+    r4 = client.post("/api/hand/view", json={"config": {
+        "sb": 100, "bb": 200, "payouts": ["NaN", 300]},
+        "hero_pos": "BTN", "hero_cards": ["As", "Ad"], "ops": []})
+    assert r4.status_code == 422

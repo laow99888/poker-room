@@ -84,10 +84,9 @@ def build_state(config: dict) -> "NoLimitTexasHoldem":
         stacks = [bb * 50] * player_count
     if len(stacks) != player_count or any(int(x) <= 0 for x in stacks):
         raise TableError(f"筹码须为 {player_count} 个正整数")
-    # PokerKit 建局时用全局 random 洗牌。这里临时固定种子，保证同一手牌
-    # 的烧牌顺序完全可复现（回放一致性），且不污染应用的其他随机流。
-    rng_state = random.getstate()
-    random.seed(_FILLER_SEED)
+    # PokerKit 的模拟烧牌在发牌/发公共牌时消费全局 random。随机性必须由
+    # replay_state 统一固定（否则同一手牌两次回放烧牌序列不同，view/advice
+    # 会漂移）；这里不再自行固定种子。
     try:
         return NoLimitTexasHoldem.create_state(
             automations=_AUTOMATIONS,
@@ -100,8 +99,6 @@ def build_state(config: dict) -> "NoLimitTexasHoldem":
         )
     except ValueError as exc:
         raise TableError(f"筹码设置无法开局（检查是否有座位付不起盲注/前注）：{exc}") from exc
-    finally:
-        random.setstate(rng_state)
 
 
 def deal_hole(state, hero_index: int, hero_cards, reserve=()) -> dict:
@@ -241,16 +238,17 @@ def hand_view(state, hero_index: int, dealt: dict) -> dict:
         })
     actor = positions[state.actor_index] if state.actor_index is not None else None
     street = STREETS[state.street_index] if state.street_index is not None else "over"
-    # 不可再被选中的牌 = 底牌/烧牌/已发公共牌，但不含占位牌——
-    # 占位牌会在下一次回放时避开用户声明的公共牌，不能锁死选牌。
-    dealable = {repr(c) for c in state.get_dealable_cards()}
+    # 23：不可再选的牌 = 已被"真实观察"的牌——英雄底牌、已发公共牌。
+    # 烧牌是系统内部动作，玩家从没见过它，不能禁选；占位牌是虚构推演，
+    # 同样不能锁死真实选牌（模拟摊牌时亮出的占位牌也不算观察）。
     filler_cards = set()
     for i, cards_i in dealt.items():
         if i != hero_index:
             filler_cards.update(cards_i)
-    taken = sorted(c for c in _ALL_CARDS
-                   if c not in dealable and c not in filler_cards)
+    known = set(dealt[hero_index]) | {
+        repr(c) for street in state.board_cards for c in street}
     simulated = bool(filler_cards)
+    taken = sorted(known)
     view = {
         "simulated": simulated,
         "positions": list(positions),
@@ -291,18 +289,38 @@ def replay(config: dict, hero_pos: str, hero_cards, ops) -> dict:
 
 
 def replay_state(config: dict, hero_pos: str, hero_cards, ops):
-    """同 replay，但返回 (引擎状态, 英雄座位索引, 发牌表) 供建议计算复用。"""
+    """同 replay，但返回 (引擎状态, 英雄座位索引, 发牌表) 供建议计算复用。
+
+    整次回放在固定随机序列下进行（确定性）：同一输入的占位牌、烧牌、
+    模拟结果完全一致——view 与 advice 并发回放不会漂移。声明的公共牌
+    若恰好撞上该序列的模拟烧牌（真实烧牌不可见，玩家选到的公共牌是
+    合法观察），自动换下一个序列重试；极限情况才报错。
+    """
     positions = positions_for(int(config.get("player_count", 6)))
     if hero_pos not in positions:
         raise TableError(f"未知座位：{hero_pos!r}，可选 {list(positions)}")
     hero_index = positions.index(hero_pos)
-    state = build_state(config)
     declared = []
     for op in (ops or []):
         if isinstance(op, dict) and op.get("op") == "board":
             cards = op.get("cards") or []
             if isinstance(cards, list):
                 declared.extend(str(c).strip() for c in cards)
-    dealt = deal_hole(state, hero_index, hero_cards, reserve=declared)
-    apply_ops(state, ops, dealt, hero_index)
-    return state, hero_index, dealt
+
+    last_err: Optional[TableError] = None
+    for attempt in range(8):
+        rng_state = random.getstate()
+        random.seed(_FILLER_SEED + attempt)
+        try:
+            state = build_state(config)
+            dealt = deal_hole(state, hero_index, hero_cards, reserve=declared)
+            apply_ops(state, ops, dealt, hero_index)
+            return state, hero_index, dealt
+        except TableError as exc:
+            if "撞车" in str(exc):
+                last_err = exc      # 模拟烧牌占用真实公共牌：换洗牌序列重放
+                continue
+            raise
+        finally:
+            random.setstate(rng_state)
+    raise last_err

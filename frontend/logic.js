@@ -35,12 +35,11 @@
   }
 
   /**
-   * 09：建议响应是否仍属于当前牌局。请求发出后只要操作数或
-   * 牌局键（底牌+座位）变了，旧响应就必须丢弃，不得覆盖当前建议。
+   * 09：建议响应是否仍属于当前牌局。25：契约明确为"两个 handKey 字符串
+   * 相等"——handKey 的任何变化（步数、底牌、座位）都会导致旧响应被丢弃。
    */
   function sameHand(before, after) {
-    if (!before || !after) return false;
-    return before.opsLen === after.opsLen && before.handKey === after.handKey;
+    return typeof before === "string" && before === after;
   }
 
   /**
@@ -74,6 +73,25 @@
     ));
   }
 
+  /**
+   * 27：匿名用户 ID——每个浏览器一份（localStorage 持久化），只用于
+   * 学习数据的归属隔离，不是身份认证。不可用时回退 "local"。
+   */
+  function playerId(store) {
+    const s = store || globalThis.localStorage;
+    if (!s) return "local";
+    try {
+      let v = s.getItem("paishi_uid");
+      if (!v) {
+        v = newHandId();
+        s.setItem("paishi_uid", v);
+      }
+      return v;
+    } catch (_) {
+      return "local";
+    }
+  }
+
   globalThis.AppLogic = { heroPickAllowed, nextZone, shouldRollbackOn, sameHand,
-                          handKey, newHandId, escapeHtml };
+                          handKey, newHandId, escapeHtml, playerId };
 })();

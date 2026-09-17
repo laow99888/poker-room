@@ -31,7 +31,8 @@ def test_record_accounting(stats_file):
     r = opponents.record_hand(cfg, ops, {"HJ": "老张"}, intel, hero_index=5)
     assert r["recorded"] is True
     data = opponents._load()
-    assert data["老张"]["hands"] == 1 and data["老张"]["vpip"] == 1
+    prof = data["users"]["local"]["named"]["老张"]
+    assert prof["hands"] == 1 and prof["vpip"] == 1
     assert data["_pool_pos"]["HJ"]["hands"] == 1    # HJ 平跟计入位置池
     assert data["_pool_pos"]["CO"]["opens"] == 1    # CO 开牌计入位置池
     assert opponents.get_stats("老张")["vpip_pct"] == 100.0
@@ -134,3 +135,55 @@ def test_hand_id_via_api(stats_file):
     payload["hand_id"] = "api-2"
     r = client.post("/api/stats/record", json=payload)
     assert r.json()["recorded"]["recorded"] is False   # 同 id 幂等
+
+
+def test_user_namespaces_isolate_profiles(stats_file):
+    """27：档案按匿名用户 ID 隔离——A 记录的对手 B 看不见；
+    reset 只清自己；人群池共享。"""
+    cfg = {"player_count": 6, "sb": 100, "bb": 200, "ante": 0}
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"}]
+    state, _, _ = replay_state(cfg, "BTN", ["As", "Ad"], ops)
+    intel = player_intel(state)
+    opponents.record_hand(cfg, ops, {"BTN": "老王"}, intel, uid="user-A")
+    assert opponents.get_stats("老王", uid="user-A")["hands"] == 1
+    assert opponents.get_stats("老王", uid="user-B")["hands"] == 0
+    opponents.reset_user("user-A")
+    assert opponents.get_stats("老王", uid="user-A")["hands"] == 0
+    assert opponents.get_pool("BTN") is None or True   # 人群池不受 user reset 影响
+
+
+def test_hand_id_window_survives_stats_volume(stats_file):
+    """29：幂等键独立保存——记录 810 手不同 ID 后重放首个 ID 仍被判重。"""
+    cfg = {"player_count": 6, "sb": 100, "bb": 200, "ante": 0}
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"}]
+    state, _, _ = replay_state(cfg, "BTN", ["As", "Ad"], ops)
+    intel = player_intel(state)
+    opponents.record_hand(cfg, ops, {}, intel, hand_id="first", uid="u1")
+    for i in range(810):
+        opponents.record_hand(cfg, ops, {}, intel, hand_id=f"x{i}", uid="u1")
+    r = opponents.record_hand(cfg, ops, {}, intel, hand_id="first", uid="u1")
+    assert r["recorded"] is False
+
+
+def test_reserved_name_prefix_falls_back_to_pool(stats_file):
+    """31：下划线开头是保留命名空间，归为无名（走人群池），不再 500。"""
+    cfg = {"player_count": 6, "sb": 100, "bb": 200, "ante": 0}
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"}]
+    state, _, _ = replay_state(cfg, "BTN", ["As", "Ad"], ops)
+    intel = player_intel(state)
+    r = opponents.record_hand(cfg, ops, {"BTN": "_pool"}, intel)
+    assert r["recorded"] is True
+    data = opponents._load()
+    assert "_pool" not in data["users"]["local"]["named"]

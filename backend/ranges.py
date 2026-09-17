@@ -26,7 +26,9 @@ def _rank_index(rank: str) -> int:
 
 
 def _normalize(code: str) -> str:
-    return code.strip().replace("10", "T")
+    # 20：点数统一大写——输出组合直接由原始字符拼成（如 'kk' 会产出
+    # 'ks'），与牌堆/公共牌的大写口径不一致时会被误判成死牌冲突
+    return code.strip().replace("10", "T").upper()
 
 
 def expand_hand_code(code: str) -> list[tuple[str, str]]:
@@ -84,12 +86,13 @@ def _expand_interval(code: str) -> list[str]:
     if len(lo) == 2 and lo[0] == lo[1] and hi[0] == hi[1]:  # 对子区间
         a, b = min(i1, i2), max(i1, i2)
         return [RANKS[k] * 2 for k in range(a, b + 1)]
-    if len(lo) == 3 and lo[0] == hi[0] and lo[2] == hi[2] and lo[2] in ("s", "o"):
+    if len(lo) == 3 and lo[0] == hi[0] and lo[2] == hi[2] \
+            and lo[2].lower() in ("s", "o"):
         j1, j2 = _rank_index(lo[1]), _rank_index(hi[1])
         if i1 != i2 and j1 == j2:
             raise InvalidHandError(f"区间两端点数须不同：{code!r}")
         a, b = min(j1, j2), max(j1, j2)
-        return [lo[0] + RANKS[k] + lo[2] for k in range(a, b + 1)]
+        return [lo[0] + RANKS[k] + lo[2].lower() for k in range(a, b + 1)]
     raise InvalidHandError(f"无法解析区间：{code!r}")
 
 

@@ -51,3 +51,10 @@ def test_invalid_inputs():
         expand_range("2A s")      # 格式错误
     with pytest.raises(InvalidHandError):
         expand_range("  ")        # 空
+
+
+def test_case_insensitive_codes_produce_identical_combos():
+    """20：大小写混合输入必须等价——'kk' 不得产出小写组合再被当成死牌。"""
+    assert expand_range("kk") == expand_range("KK")
+    assert expand_range("aks,Ako") == expand_range("AKs,AKo")
+    assert expand_hand_code("kk")[0][0].startswith("K")   # 点数归一为大写

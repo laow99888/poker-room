@@ -1,0 +1,35 @@
+{
+  "logs": [
+    {
+      "url": "/api/hand/view"
+    },
+    {
+      "url": "/api/hand/advice"
+    },
+    {
+      "released": true
+    },
+    {
+      "json": true,
+      "template": true
+    },
+    {
+      "a": "AsAd|UTG|0",
+      "b": "__|UTG|0",
+      "r": true
+    },
+    {
+      "a": "AsAd|UTG|0",
+      "b": "__|UTG|0",
+      "r": true
+    }
+  ],
+  "advice": false,
+  "error": null,
+  "view": null,
+  "cards": [
+    null,
+    null
+  ],
+  "same": true
+}

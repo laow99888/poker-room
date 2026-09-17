@@ -96,3 +96,23 @@ def test_invalid_money_rejected():
             assert False, bad
         except Exception as exc:
             assert "money" in str(exc) or "为负" in str(exc), (bad, exc)
+
+
+def test_capped_short_allin_call_models_refund():
+    """21：不足额全下跟注——英雄已投 1、对手投 10、英雄只剩 2：
+    跟 2 后对手退回 7，只争 6，门槛 33.33%。40% 权益必须以跟注为主
+    （老口径按足额跟到 10 建 c0=c1=10，解出 fold≈100%）。"""
+    hero, vil = _spot()
+    res = solve_river(BOARD, hero, vil, money=(1, 10, 0, 2, 0),
+                      buckets=1, iterations=1600)
+    strat = res["avg_strategy"][(0, 0, "")]
+    assert strat["call"] > 0.9, strat
+
+
+def test_no_raise_permission_disables_raise_branch():
+    """21：引擎无加注权（对手已全下）时骨架不得生成 raise 分支。"""
+    hero, vil = _spot()
+    res = solve_river(BOARD, hero, vil, money=(1, 49, 0, 47, 0),
+                      buckets=1, iterations=200, allow_raise=False)
+    assert "raise" not in res["root_labels"]
+    assert set(res["root_labels"]) == {"fold", "call"}

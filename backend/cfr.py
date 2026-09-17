@@ -274,7 +274,8 @@ def solve_river(board, hero_combos, villain_combos, pot_bb: float = None,
                 to_call_bb: float = 0.0,
                 stack_bb: float = 10.0, bet_sizes=(1.0,), raise_size: float = 1.0,
                 buckets: int = 8, iterations: int = 1200,
-                range_cap: int = 120, keep=(), money=None) -> dict:
+                range_cap: int = 120, keep=(), money=None,
+                allow_raise: bool = True) -> dict:
     """河牌单街求解。英雄恒为座位 0（当前决策者），面额 BB。
 
     范围超过 range_cap 时按探测权益分层抽样；keep 中的组合必保留。
@@ -354,7 +355,7 @@ def solve_river(board, hero_combos, villain_combos, pot_bb: float = None,
 
     skeleton = _skeleton(to_call > 1e-9, s0, s1, dead, r0, r1,
                          tuple(bet_sizes), raise_size, max_raises=1,
-                         eq_terminal=True)
+                         eq_terminal=True, allow_raise=allow_raise)
 
     # 固定迭代数：结果确定，耗时由 range_cap 与 iterations 共同封顶
     avg = solve_pairs(skeleton, pairs, bvmat, iterations=iterations)
@@ -396,7 +397,8 @@ def _bucket_assign(combos, vmat_rows, n_buckets, strengths=None):
 
 
 def _skeleton(facing, s0, s1, dead, r0, r1, bet_sizes, raise_size: float,
-              max_raises: int = 1, eq_terminal: bool = False):
+              max_raises: int = 1, eq_terminal: bool = False,
+              allow_raise: bool = True):
     """单街行动骨架（与具体组合无关，逐桶对共享）。面额统一为 BB。
 
     金额三路分离（03）：s0/s1 = 双方累计投入（含前街与死钱之外的所有
@@ -408,7 +410,9 @@ def _skeleton(facing, s0, s1, dead, r0, r1, bet_sizes, raise_size: float,
     eq_terminal=True 时摊牌节点终值为期望胜率 [0,1]（多街 rollout / 河牌
     桶平均），否则 ±1 符号。
 
-    已知边界：跟注按足额持平建模（不足额全下跟注的边池不在单街骨架内）。
+    21：跟注按"封顶匹配"建模——不足额全下跟注只补齐自身身后筹码，
+    对手超额投入部分退回（摊牌只争匹配后的池）；allow_raise=False 表示
+    引擎层面已无加注权（如对手全下），骨架不生成 raise 分支。
     """
     dead = float(dead)
 
@@ -435,11 +439,13 @@ def _skeleton(facing, s0, s1, dead, r0, r1, bet_sizes, raise_size: float,
             children.append({"kind": "fold",
                              "net0": (b + dead) if actor == 1 else -a})
             labels.append("call")
-            # 跟注后双方累计持平；赢则收下对手投入+死钱，输则沉没自己那份
-            children.append({"kind": "showdown", "c0": opp_committed,
-                             "c1": opp_committed + dead,
+            # 跟注封顶匹配（21）：只补到自身身后再无筹码为止，
+            # 对手超额部分退回；摊牌争的是匹配后的池
+            match = committed + min(opp_committed - committed, behind)
+            children.append({"kind": "showdown", "c0": match,
+                             "c1": match + dead,
                              **({"eq": True} if eq_terminal else {})})
-            if raises < max_raises:
+            if allow_raise and raises < max_raises:
                 target = min(opp_committed + raise_size * pot,
                              committed + behind)
                 if target > opp_committed:
@@ -547,7 +553,8 @@ def solve_street(board, hero_combos, villain_combos, pot_bb: float = None,
                  buckets: int = 8, iterations: int = 1200,
                  range_cap: int = 120, keep=(),
                  probe_runouts: int = 8, pair_runouts: int = 24,
-                 pair_samples: int = 10, money=None) -> dict:
+                 pair_samples: int = 10, money=None,
+                 allow_raise: bool = True) -> dict:
     """单街求解总入口：河牌（5 张）直接走 solve_river 精确路径；
     翻牌（3 张）/转牌（4 张）把"剩余牌随机发完的期望胜率" rollout 成桶对终值。
 
@@ -563,7 +570,8 @@ def solve_street(board, hero_combos, villain_combos, pot_bb: float = None,
                            to_call_bb=to_call_bb, stack_bb=stack_bb,
                            bet_sizes=tuple(bet_sizes), raise_size=raise_size,
                            buckets=buckets, iterations=iterations,
-                           range_cap=range_cap, keep=keep, money=money)
+                           range_cap=range_cap, keep=keep, money=money,
+                           allow_raise=allow_raise)
     if len(board) not in (3, 4):
         raise CFRError("多街求解只支持翻牌（3 张）或转牌（4 张）公共牌")
 
@@ -636,7 +644,7 @@ def solve_street(board, hero_combos, villain_combos, pot_bb: float = None,
 
     skeleton = _skeleton(to_call > 1e-9, s0, s1, dead, r0, r1,
                          tuple(bet_sizes), raise_size, max_raises=1,
-                         eq_terminal=True)
+                         eq_terminal=True, allow_raise=allow_raise)
 
     avg = solve_pairs(skeleton, pairs, bvmat, iterations=iterations)
     return {

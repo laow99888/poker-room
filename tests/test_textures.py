@@ -66,3 +66,14 @@ def test_range_advantage_direction_sanity():
                          ["Ah", "Kd", "2c", "9h", "5s"], iterations=4000, seed=3)
     assert ra["hero_eq"] > 75
     assert ra["adv"] > 50
+
+
+def test_overlapping_ranges_are_not_computable():
+    """32：双方实体牌交集的组合对不可能同时出现 → 不可评估（None），
+    而不是返回无意义的 50%。"""
+    assert range_equity([("As", "Ad")], [("As", "Ad")],
+                        ["2c", "3d", "7h", "9c", "Td"], 100, 7) is None
+    # 部分重叠：合法对仍在，结果正常且有限
+    v = range_equity([("As", "Ad")], [("As", "Ad"), ("Kh", "Kd")],
+                     ["2c", "3d", "7h"], 500, 7)
+    assert v is not None and 0 <= v <= 100
