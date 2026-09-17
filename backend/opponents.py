@@ -126,3 +126,18 @@ def get_stats(name: str) -> dict:
         "pfr_pct": round(p.get("pfr", 0) * 100 / hands, 1) if hands else None,
         "threebet_pct": round(p.get("threebet", 0) * 100 / hands, 1) if hands else None,
     }
+
+
+def summary() -> dict:
+    """学习进度汇总：人群池按位置样本 + 具名档案。"""
+    data = _load()
+    pool_pos = data.get("_pool_pos", {})
+    named = {k: v for k, v in data.items()
+             if not k.startswith("_") and isinstance(v, dict)}
+    total = sum(pp.get("hands", 0) for pp in pool_pos.values())
+    return {"total_hands": total, "pool": pool_pos, "named": named}
+
+
+def reset_all() -> None:
+    """清空全部学习数据（人群池 + 具名档案 + 去重签名）。"""
+    _save({})

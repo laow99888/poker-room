@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>牌室 · 德州扑克 MTT 决策辅助</title>
-<link rel="stylesheet" href="style.css?v=20260917e">
+<link rel="stylesheet" href="style.css?v=20260919b">
 </head>
 <body>
 <div class="felt-vignette" aria-hidden="true"></div>
@@ -52,6 +52,11 @@
       <div class="stack-grid" id="stack-grid"></div>
 
       <div class="setup-row">
+        <span class="inline-label">对手代号 <span class="tip">（用于累计统计，可留空）</span></span>
+      </div>
+      <div class="stack-grid" id="names-grid"></div>
+
+      <div class="setup-row">
         <span class="inline-label">我的底牌</span>
         <div class="slots" id="hero-slots"></div>
       </div>
@@ -96,6 +101,13 @@
       <div id="advice" aria-live="polite"><p class="empty">轮到你行动时，这里给出胜率与赔率分析。</p></div>
     </div>
 
+    <div class="panel" id="learn-panel" aria-label="学习进度">
+      <div class="group-title">学习进度 <span class="tip">（打一手积累一手）</span>
+        <button type="button" class="ghost-btn" data-action="stats-reset" style="margin-left:auto">清空</button>
+      </div>
+      <div id="learn-line" aria-live="polite">—</div>
+    </div>
+
     <div class="panel" id="help-panel" aria-label="说明">
       <div class="group-title">玩法</div>
       <p class="footnote">按座位顺序录入每一家的动作；有人全下后发完公共牌即自动摊牌分池，摊牌后亮出未弃牌玩家的底牌。
@@ -106,9 +118,9 @@
 </main>
 
 <footer class="foot">
-  v2.2.0 · 仅供复盘、学习与研究 &mdash; 请勿在在线对局中作为实时辅助使用（各平台均视为作弊）。
+  v2.3.0 · 仅供复盘、学习与研究 &mdash; 请勿在在线对局中作为实时辅助使用（各平台均视为作弊）。
 </footer>
 
-<script src="app.js?v=20260918c"></script>
+<script src="app.js?v=20260919b"></script>
 </body>
 </html>

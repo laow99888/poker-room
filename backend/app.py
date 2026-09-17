@@ -140,5 +140,18 @@ def stats_get_api(name: str):
     return opponents.get_stats(name)
 
 
+@app.post("/api/stats/reset")
+def stats_reset_api():
+    opponents.reset_all()
+    return {"reset": True}
+
+
+@app.get("/api/stats/summary/all")
+def stats_summary_api():
+    """学习进度：人群池按位置的样本量 + 具名档案列表。"""
+    data = opponents.summary()
+    return data
+
+
 _FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/", StaticFiles(directory=str(_FRONTEND), html=True), name="static")

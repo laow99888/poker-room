@@ -231,6 +231,8 @@ function renderConsole() {
 
   const tc = state.view.to_call;
   const dis = state.busy ? "disabled" : "";
+  const canRaise = state.view.min_raise_to != null && state.view.max_raise_to != null
+    && state.view.max_raise_to > state.view.to_call;
   const clampTo = (chips) => Math.max(state.view.min_raise_to, Math.min(state.view.max_raise_to, chips));
   const presets = {
     min: state.view.min_raise_to,
@@ -240,19 +242,34 @@ function renderConsole() {
     const foldBtn = tc > 0
     ? `<button type="button" class="act-btn fold" ${dis} data-action="do-fold">弃牌</button>`
     : "";   // 面前无注时规则上不允许弃牌，只提供过牌/加注
+  const raiseBtns = canRaise ? `
+      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.min}" title="加注到最小加注额">加注 ${bb(presets.min)} BB</button>
+      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.half}" title="下注约半个底池">半池 ${bb(presets.half)} BB</button>
+      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.pot}" title="下注约一个底池">满池 ${bb(presets.pot)} BB</button>` : "";
+  const raiseRow = canRaise ? `
+    <div class="raise-row">
+      <input type="number" id="raise-to" step="0.1" value="${bb(presets.min)}" min="${bb(state.view.min_raise_to)}" max="${bb(state.view.max_raise_to)}" aria-label="自定义加注到（BB），回车确认" ${dis}> BB
+      <button type="button" class="ghost-btn" ${dis} data-action="do-raise-input">按输入值加注（回车）</button>
+    </div>` : "";
   area.innerHTML = `
     <div class="action-row">
       ${foldBtn}
       <button type="button" class="act-btn call" ${dis} data-action="do-call">${tc > 0 ? `跟注 ${bb(tc)} BB` : "过牌"}</button>
-      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.min}" title="加注到最小加注额">加注 ${bb(presets.min)} BB</button>
-      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.half}" title="下注约半个底池">半池 ${bb(presets.half)} BB</button>
-      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.pot}" title="下注约一个底池">满池 ${bb(presets.pot)} BB</button>
+      ${raiseBtns}
       <button type="button" class="act-btn allin" ${dis} data-action="do-allin">全下 ${bb(state.view.max_raise_to)} BB</button>
     </div>
-    <div class="raise-row">
-      <input type="number" id="raise-to" step="0.1" value="${bb(presets.min)}" min="${bb(state.view.min_raise_to)}" max="${bb(state.view.max_raise_to)}" aria-label="自定义加注到（BB），回车确认" ${dis}> BB
-      <button type="button" class="ghost-btn" ${dis} data-action="do-raise-input">按输入值加注（回车）</button>
-    </div>`;
+    ${raiseRow}`;
+}
+
+async function refreshLearn() {
+  try {
+    const r = await fetch("/api/stats/summary/all");
+    const d = await r.json();
+    const posStr = Object.entries(d.pool || {}).map(([p, v]) => p + ":" + v.hands).join(" · ");
+    $("#learn-line").textContent =
+      "已积累 " + d.total_hands + " 手人群数据" + (posStr ? "（" + posStr + "）" : "") +
+      (Object.keys(d.named || {}).length ? " · 具名档案 " + Object.keys(d.named).length : "");
+  } catch (_) { /* 静默 */ }
 }
 
 /* ---------- 建议面板 ---------- */
@@ -270,11 +287,41 @@ function renderAdvice() {
   }
   const eq = a.equity;
   const rec = a.recommendation;
+  const mixHtml = (mix) => mix.map((m) => `
+    <div class="mix-row">
+      <span class="mix-label">${m.label}</span>
+      <span class="mix-bar" role="img" aria-label="${m.label} ${m.pct}%">
+        <i style="width:${Math.max(2, Math.min(100, m.pct))}%"></i>
+      </span>
+      <span class="mix-pct">${m.pct}%</span>
+    </div>`).join("");
+  const recHtml = `
+    <div class="rec-box">
+      <div class="rec-title">行动建议（启发式）</div>
+      <div class="rec-primary">${rec.primary}</div>
+      ${mixHtml(rec.mix)}
+      <p class="rec-reason">${rec.reason}</p>
+    </div>`;
+  let cfrHtml = "";
+  const c = a.cfr;
+  if (c && c.supported) {
+    cfrHtml = `
+      <div class="cfr-box">
+        <div class="cfr-title">第三层 · CFR 均衡参考
+          <span class="cfr-meta">河牌 · ${c.iterations} 次迭代 · ${c.hero_range_combos}×${c.villain_range_combos} 组合${c.range_capped ? "（已抽样）" : ""}</span>
+        </div>
+        ${mixHtml(c.mix)}
+        <p class="cfr-note">你的手牌相对对手范围权益约 ${c.equity_vs_range}%（${c.buckets} 桶抽象）。${c.agree ? "与启发式方向一致。" : "与启发式主建议方向不同：此处是范围层面的均衡频率，供交叉参考。"}</p>
+      </div>`;
+  } else if (c && !c.supported && c.reason && !c.reason.includes("河牌")) {
+    cfrHtml = `<p class="footnote">CFR 参考：${c.reason}</p>`;
+  }
   box.innerHTML = `
     <div class="big">${eq.win.toFixed(1)}<small> % 胜率（含平 ${eq.tie.toFixed(1)}%）</small></div>
     <div class="bar" role="img" aria-label="胜 ${eq.win}% 平 ${eq.tie}% 负 ${eq.lose}%">
       <i class="w" style="width:${eq.win}%"></i><i class="t" style="width:${eq.tie}%"></i><i class="l" style="width:${eq.lose}%"></i>
     </div>
+    ${recHtml}
     <table class="adv-table">
       <tr><td>需跟注</td><td>${a.to_call > 0 ? bb(a.to_call) + " BB" : "0（可过牌）"}</td></tr>
       <tr><td>跟注所需胜率</td><td>${a.required_eq}%</td></tr>
@@ -290,6 +337,7 @@ function renderAdvice() {
       const narrow = o.narrowed ? " · 范围已按 PFR 收窄" : "";
       return `<div class="range-item">${name}：${o.situation} · ${o.combos} 组合${stat}${narrow} · 剩余 ${bb(o.stack)} BB</div>`;
     }).join("")}</div>
+    ${cfrHtml}
     <p class="footnote">${a.note} · 模拟 ${money(eq.iterations)} 手 · ${eq.elapsedMs} ms</p>`;
 }
 
@@ -367,7 +415,7 @@ async function refresh(retries = 0) {
       fetch("/api/stats/record", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload()),
-      }).catch(() => {});
+      }).then(() => refreshLearn()).catch(() => {});
     }
     renderAll();
     if (data.actor === state.heroPos && !data.hand_over) {
@@ -459,7 +507,9 @@ document.addEventListener("click", (ev) => {
     case "do-call": pushOp({ op: "action", type: state.view.to_call > 0 ? "call" : "check", seat: state.view.actor }); return;
     case "do-allin": pushOp({ op: "action", type: "allin", seat: state.view.actor }); return;
     case "do-raise-to": {
-      const to = clampToChips(Number(btn.dataset.to));
+      // data-to 已是筹码值；仅夹在合法范围内，不能再按 BB 换算
+      const v = Number(btn.dataset.to);
+      const to = Math.max(state.view.min_raise_to, Math.min(state.view.max_raise_to, v));
       pushOp({ op: "action", type: "raise", to, seat: state.view.actor });
       return;
     }
@@ -471,6 +521,11 @@ document.addEventListener("click", (ev) => {
       state.ops = []; state.heroCards = [null, null]; state.view = null;
       state.advice = null; state.pending = null; state.error = null; state.gridMode = "hero";
       refresh();
+      return;
+    case "stats-reset":
+      if (confirm("确定清空全部学习数据？")) {
+        fetch("/api/stats/reset", { method: "POST" }).then(() => refreshLearn());
+      }
       return;
     case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; $("#board-grid-wrap").hidden = true; refresh(); return;
     case "reset":
@@ -574,3 +629,4 @@ $("#cfg-stack").value = state.config.stack;
 state.gridMode = "hero";
 tuneIterations();
 renderAll();
+refreshLearn();

@@ -4,9 +4,120 @@
 每个可选动作带一个建议百分比，供玩家参考节奏，而非机械执行。
 """
 
-from . import charts, equity, opponents as opponents_mod, textures
+from . import charts, cfr as cfr_mod, equity, opponents as opponents_mod, textures
 from .ranges import expand_range
 from .table import STREETS, TableError, positions_for
+
+_RANK_ORDER = "AKQJT98765432"
+
+
+def _norm_combo(cards) -> tuple:
+    """把两张底牌规范化成 (高牌, 低牌) 组合，如 ['kd','As'] -> ('As','Kd')。"""
+    return tuple(sorted((c[0].upper() + c[1].lower() for c in cards),
+                        key=lambda c: _RANK_ORDER.index(c[0])))
+
+
+def _action_class(action: str) -> str:
+    if action in ("bet", "raise", "allin"):
+        return "aggr"
+    if action in ("call", "check"):
+        return "passive"
+    return "fold"
+
+
+def _cfr_river_block(state, hero_index, hero_cards, hero_combos, villain_combos,
+                     board, recommendation) -> dict:
+    """第三层：河牌 CFR 均衡参考（单挑限定；超预算/不支持时优雅降级，不影响主建议）。"""
+    try:
+        live = [i for i in range(state.player_count)
+                if i != hero_index and state.statuses[i]]
+        if len(board) != 5:
+            return {"supported": False, "reason": "CFR 参考目前只支持河牌（5 张公共牌）"}
+        if len(live) != 1:
+            return {"supported": False, "reason": "CFR 参考仅支持单挑底池"}
+        if not hero_combos or not villain_combos:
+            return {"supported": False, "reason": "范围信息不足，无法求解"}
+        bb = state.blinds_or_straddles[1]
+        if bb <= 0:
+            return {"supported": False, "reason": "盲注配置异常"}
+
+        pot_bb = state.total_pot_amount / bb
+        to_call_bb = state.checking_or_calling_amount / bb
+        stack_bb = min(state.stacks[hero_index], state.stacks[live[0]]) / bb
+        hero_range = list(hero_combos)
+        actual = _norm_combo(hero_cards)
+        actual_added = not any(frozenset(c) == frozenset(actual) for c in hero_range)
+        if actual_added:
+            hero_range.append(actual)
+
+        res = cfr_mod.solve_river(board, hero_range, villain_combos,
+                                  pot_bb=pot_bb, to_call_bb=to_call_bb,
+                                  stack_bb=stack_bb, bet_sizes=(0.5, 1.0),
+                                  buckets=8, iterations=1600, keep=[actual])
+
+        idx = next(i for i, c in enumerate(res["hero_combos"])
+                   if frozenset(c) == frozenset(actual))
+        bucket = res["hero_bucket"][idx]
+        strat = res["avg_strategy"].get((0, bucket, ""))
+        if not strat:
+            return {"supported": False, "reason": "未找到对应决策点"}
+
+        sk = res["skeleton"]
+        mix = []
+        for label, child in zip(sk["labels"], sk["children"]):
+            p = strat.get(label, 0.0)
+            if p < 0.005:
+                continue
+            entry = {"action": label.split(":")[0], "freq": round(p, 3),
+                     "pct": int(round(p * 100))}
+            if label == "check":
+                entry["label"] = "过牌"
+            elif label == "call":
+                entry["label"] = f"跟注 {round(to_call_bb, 1)} BB"
+            elif label == "fold":
+                entry["label"] = "弃牌"
+            elif label.startswith("bet"):
+                add = child.get("bet_add", 0.0)
+                entry["label"] = ("全下" if child.get("allin")
+                                  else f"下注 {round(add, 1)} BB")
+            elif label == "raise":
+                entry["label"] = f"加注到 {round(child.get('raise_to', 0.0), 1)} BB"
+            mix.append(entry)
+        # 多个下注尺度因筹码不足聚成同一种"全下"时合并展示
+        merged = []
+        for m in mix:
+            for q in merged:
+                if q["label"] == m["label"]:
+                    q["freq"] = round(q["freq"] + m["freq"], 3)
+                    q["pct"] = int(round(q["freq"] * 100))
+                    break
+            else:
+                merged.append(m)
+        mix = sorted((m for m in merged if m["freq"] >= 0.005),
+                     key=lambda m: -m["freq"])
+
+        heur_top = recommendation["mix"][0]["action"] if recommendation["mix"] else None
+        cfr_top = mix[0]["action"] if mix else None
+        return {
+            "supported": True,
+            "mix": mix,
+            "bucket": bucket,
+            "buckets": res["bucket_count"],
+            "pairs": res["pairs"],
+            "iterations": res["iterations"],
+            "equity_vs_range": round((res["hero_strength"][idx] + 1) / 2 * 100, 1),
+            "hero_range_combos": len(res["hero_combos"]),
+            "villain_range_combos": len(res["villain_combos"]),
+            "range_capped": bool(res.get("hero_capped") or res.get("villain_capped")),
+            "actual_added": actual_added,
+            "agree": (heur_top is not None and cfr_top is not None
+                      and _action_class(heur_top) == _action_class(cfr_top)),
+            "note": "CFR+ 均衡参考：双方范围按权益分桶抽象后求解",
+        }
+    except cfr_mod.CFRError as exc:
+        return {"supported": False, "reason": str(exc)}
+    except Exception as exc:  # 求解层任何意外都不得影响主建议
+        return {"supported": False, "reason": f"求解器内部错误：{exc}"}
 
 
 def player_intel(state) -> dict:
@@ -381,6 +492,9 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
         state, hero_index, eq, to_call, pot, required, len(opponents),
         range_adv_val=(range_adv["adv"] if range_adv else None))
 
+    cfr_block = _cfr_river_block(state, hero_index, hero_cards, hero_combos,
+                                 villain_merged, board, recommendation)
+
     return {
         "equity": eq,
         "opponents": opponents,
@@ -394,6 +508,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
         "m_value": round(hero_stack / orbit_cost, 1) if orbit_cost > 0 else None,
         "note": "对手范围按其翻前线路自动估算，可在范围图中调整",
         "recommendation": recommendation,
+        "cfr": cfr_block,
         "texture": texture,
         "range_adv": range_adv,
         "nut_adv": nut_adv,

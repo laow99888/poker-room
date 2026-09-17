@@ -1,6 +1,6 @@
-# 牌室 · 德州扑克离线胜率计算器
+# 牌室 · 德州扑克离线决策辅助
 
-完全离线的德州扑克分析工具：点选式界面 + 蒙特卡洛胜率模拟 + 底池赔率计算。
+完全离线的德州扑克分析工具：点选式牌局录入 + 三层决策算法 + 学习型对手画像。
 无 AI 推理、无网络请求，全部计算在本机 CPU 上完成。
 
 ## 运行
@@ -12,13 +12,32 @@ python run.py
 ```
 
 开发/测试依赖：`pip install -r requirements-dev.txt`，运行 `python -m pytest tests -q`。
+深度推演脚本：`python _verify_layer1.py` / `python _verify_layer3.py`（失败即非零退出）。
 
-## 功能（v1）
+## 三层决策算法
 
-- **点选发牌**：52 张牌网格点选底牌、公共牌与对手手牌，无需手打牌名；
-- **对手范围**：13×13 范围矩阵（同花/不同花/对子）+ 常用预设，支持 1–5 个对手；
-- **胜率模拟**：蒙特卡洛 1 万–50 万次，输出胜/平/负分布；
-- **底池赔率**：输入底池与跟注额，算出需要的最低胜率，并自动与模拟胜率对比给出跟注 EV；
+| 层 | 内容 | 入口 |
+|---|---|---|
+| 1 | 蒙特卡洛权益、牌面结构（湿润度/连牌/同花）、范围优势 RA / 坚果优势 NA、SPR 与底池赔率的混合策略建议 | `textures.py` `equity.py` `decision.py` |
+| 2 | 对手建模：按位置人群池统计 + 具名档案（VPIP/PFR/3bet），按行为情报（rfi/3bet/跟注/弃牌）贝叶斯式收窄对手范围 | `opponents.py` |
+| 3 | 河牌单街 CFR+ 求解器：双方范围按权益分桶抽象后迭代求解，输出纳什均衡参考频率（诈唬比例、价值下注、抓诈跟注） | `cfr.py` |
+
+第三层的正确性由教科书锚点局保证（tests + 推演脚本双重校验）：
+
+- **Kuhn 扑克**：游戏值收敛到理论值 −1/18，策略收敛到已知均衡族（J 诈唬 α、K 下注 3α、Q 遭注跟注 α+1/3）；
+- **AKQ 单街**：空气牌诈唬频率 = B/(P+B)、抓诈方跟注频率 = P/(P+B)，在半池/底池/超池三种尺度下全部吻合；
+- **河牌 AKQ 同构**（AA+22 vs KK，真实 treys 评估）：复现上述定理频率。
+
+工程约束：求解器固定迭代数（1600 次）且范围封顶（120 组合/人、8 桶抽象），
+同参数结果逐位可复现；河牌单挑限定，超出的场景优雅降级并说明原因。
+
+## 功能
+
+- **点选式牌局录入**：52 张牌网格选底牌与公共牌，操作台按座位顺序录入动作，支持撤销与一键重开；
+- **实时建议**：胜率/平/负分布、跟注所需胜率与 EV、SPR、M 值、牌面结构标签；
+- **行动建议**：启发式混合策略（带百分比频率）+ 河牌 CFR 均衡参考并列展示；
+- **对手画像**：每手结束自动累计人群统计与具名档案，建议自动按统计收窄对手范围；
+- **6/8/9 人桌**：位置感知范围图（RFI/3bet/跟注/防守），`backend/data/charts.json` 可调；
 - 固定随机种子可复现结果（仅供测试用）。
 
 ## 技术栈与选型
@@ -26,24 +45,33 @@ python run.py
 | 层 | 选择 | 原因 |
 |---|---|---|
 | 牌力评估 | [treys](https://github.com/ihendley/treys) (MIT) | 纯 Python 免编译；eval7 的 C 扩展在 Python 3.14 无轮子，`backend/equity.py` 保留了 eval7 适配分支，环境允许时自动切换提速 |
-| 后端 | FastAPI + uvicorn | 一个命令启动，参数校验内建，后续牌谱监控/训练器同栈扩展 |
+| 博弈求解 | 自研 CFR+（`backend/cfr.py`） | 单街规模小到纯 Python 可控；避免引入带原生依赖的求解器，保证离线与可解释 |
+| 后端 | FastAPI + uvicorn | 一个命令启动，参数校验内建 |
 | 前端 | 原生 HTML/CSS/JS | 零构建、零外部资源（无 CDN、无在线字体），保证离线可用 |
 
 ## 结构
 
 ```
-backend/ranges.py   手牌代码与范围字符串解析（TT+、A2s+、AKo…）
-backend/equity.py   蒙特卡洛引擎 + treys/eval7 适配层
-backend/app.py      FastAPI：POST /api/equity + 静态页面
-frontend/           单页界面（牌面网格、范围矩阵、结果与底池赔率）
-tests/              范围解析、已知对局基准（AA vs KK ≈ 81.9%）、API 校验
+backend/ranges.py    手牌代码与范围字符串解析（TT+、A2s+、AKo…）
+backend/charts.py    位置范围图加载与查询
+backend/equity.py    蒙特卡洛引擎 + treys/eval7 适配层
+backend/textures.py  牌面结构 + 范围/坚果优势（第一层）
+backend/opponents.py 对手画像统计与范围收窄（第二层）
+backend/cfr.py       CFR+ 引擎、锚点局、河牌单街求解器（第三层）
+backend/decision.py  建议链路：情报 → 范围 → 权益 → 建议 + CFR 块
+backend/table.py     PokerKit 状态机封装（replay/校验/视图）
+backend/app.py       FastAPI：/api/hand/*、/api/stats/*、/api/equity
+frontend/            三栏单页（设置+牌库 / 牌桌 / 操作台+建议）
+tests/               65 项测试：锚点局、河牌定理、集成与 API
+_verify_layer1.py    第一层深度推演
+_verify_layer3.py    第三层深度推演（收敛/确定性/稳定性/性能）
 ```
 
 ## 路线图
 
-- v2：线上平台牌谱（Hand History）文件夹监控与自动复盘
-- v3：翻前范围训练器（随机发牌出题）
-- v4：河牌圈 GTO 求解（参考开源 TexasSolver / CFR）
+- ✅ v2 三层决策算法（权益与结构 → 对手建模 → CFR 求解）
+- v4 翻牌/转牌多街求解（当前 CFR 仅河牌）、ICM 决赛桌奖金换算
+- v5 线上平台牌谱（Hand History）文件夹监控与自动复盘
 
 ## 合规提醒
 
