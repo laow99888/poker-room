@@ -251,12 +251,15 @@ function renderConsole() {
       <input type="number" id="raise-to" step="0.1" value="${bb(presets.min)}" min="${bb(state.view.min_raise_to)}" max="${bb(state.view.max_raise_to)}" aria-label="自定义加注到（BB），回车确认" ${dis}> BB
       <button type="button" class="ghost-btn" ${dis} data-action="do-raise-input">按输入值加注（回车）</button>
     </div>` : "";
+  const allinBtn = canRaise
+    ? `<button type="button" class="act-btn allin" ${dis} data-action="do-allin">全下 ${bb(state.view.max_raise_to)} BB</button>`
+    : "";   // 面对全下时全下≡跟注，隐藏以免误导（旧版此处渲染"全下 0.0 BB"）
   area.innerHTML = `
     <div class="action-row">
       ${foldBtn}
       <button type="button" class="act-btn call" ${dis} data-action="do-call">${tc > 0 ? `跟注 ${bb(tc)} BB` : "过牌"}</button>
       ${raiseBtns}
-      <button type="button" class="act-btn allin" ${dis} data-action="do-allin">全下 ${bb(state.view.max_raise_to)} BB</button>
+      ${allinBtn}
     </div>
     ${raiseRow}`;
 }
@@ -384,10 +387,27 @@ function showError(msg) {
   line.textContent = msg.includes(hint) ? msg : msg + hint;
 }
 
+function pushOp(op) {
+  if (state.busy) { state.pending = op; return; }          // 忙碌：暂存，处理完自动补上
+  if (op.op === "action") {
+    if (!state.view || state.view.hand_over || state.view.actor !== op.seat) return;  // 行动者校验
+  }
+  if (op.op === "board" && state.view && state.view.actor) return;
+  state.error = null;
+  state.ops.push(op);
+  state.busy = true;         // 点击即刻禁用操作按钮，不等网络返回（防连点）
+  renderConsole();
+  refreshCore();
+}
+
 async function refresh(retries = 0) {
   if (!state.heroCards.every(Boolean)) { renderAll(); return; }
   if (state.busy) return;                    // 防重入
   state.busy = true;
+  return refreshCore(retries);
+}
+
+async function refreshCore(retries = 0) {
   try {
     const r = await fetch("/api/hand/view", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -399,7 +419,7 @@ async function refresh(retries = 0) {
       if (state.ops.length > 0 && retries < 3) {
         state.ops.pop();
         state.busy = false;
-        return refresh(retries + 1);
+        return refreshCore(retries + 1);
       }
       showError((data.detail || `请求失败（${r.status}）`) + "（可点「撤销上一步」回退）");
       state.busy = false;
@@ -438,17 +458,6 @@ async function refresh(retries = 0) {
     state.pending = null;
     pushOp(op);
   }
-}
-
-function pushOp(op) {
-  if (state.busy) { state.pending = op; return; }          // 忙碌：暂存，处理完自动补上
-  if (op.op === "action") {
-    if (!state.view || state.view.hand_over || state.view.actor !== op.seat) return;  // 行动者校验
-  }
-  if (op.op === "board" && state.view && state.view.actor) return;
-  state.error = null;
-  state.ops.push(op);
-  refresh();
 }
 
 /* ---------- 事件 ---------- */
