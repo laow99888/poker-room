@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import decision, equity, opponents
+from .icm import ICMError, icm_equities
 from .ranges import InvalidHandError
 from .table import TableError, replay_state
 
@@ -35,6 +36,7 @@ class HandConfigIn(BaseModel):
     bb: int
     ante: int = 0
     stacks: Optional[List[int]] = None
+    payouts: List[float] = []   # 决赛桌奖金结构（可选），如 [500, 300, 200]
 
 
 class HandIn(BaseModel):
@@ -97,11 +99,34 @@ def _replay_or_400(payload: HandIn):
         raise HTTPException(400, str(exc))
 
 
+def _attach_icm(view: dict, config: HandConfigIn) -> None:
+    """配置了奖金结构时，把 ICM 奖金期望挂到视图上（解析失败静默跳过）。"""
+    payouts = [float(p) for p in (config.payouts or [])]
+    if not payouts or not any(p > 0 for p in payouts):
+        return
+    if any(p < 0 for p in payouts) or len(payouts) > len(view["seats"]):
+        view["icm"] = {"error": "奖金结构无效：需为非负数，且名次数不超过人数"}
+        return
+    try:
+        eq = icm_equities([s["stack"] for s in view["seats"]], payouts)
+    except ICMError as exc:
+        view["icm"] = {"error": str(exc)}
+        return
+    pool = float(sum(payouts))
+    rows = [{"pos": s["pos"], "stack": s["stack"], "hero": s.get("is_hero", False),
+             "equity": round(eq[i], 1), "pct": round(eq[i] * 100 / pool, 1)}
+            for i, s in enumerate(view["seats"])]
+    rows.sort(key=lambda r: -r["equity"])
+    view["icm"] = {"payouts": payouts, "total": pool, "rows": rows}
+
+
 @app.post("/api/hand/view")
 def hand_view_api(payload: HandIn):
     state, hero_index, dealt = _replay_or_400(payload)
     from .table import hand_view
-    return hand_view(state, hero_index, dealt)
+    view = hand_view(state, hero_index, dealt)
+    _attach_icm(view, payload.config)
+    return view
 
 
 @app.post("/api/hand/advice")
@@ -111,6 +136,7 @@ def hand_advice_api(payload: HandIn):
     state, hero_index, dealt = _replay_or_400(payload)
     from .table import hand_view
     view = hand_view(state, hero_index, dealt)
+    _attach_icm(view, payload.config)
     if view["hand_over"]:
         raise HTTPException(400, "这手牌已经结束")
     if view["actor"] != payload.hero_pos:

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>大魔丸 · 德州扑克 MTT 决策辅助</title>
-<link rel="stylesheet" href="style.css?v=20260919e">
+<link rel="stylesheet" href="style.css?v=20260919f">
 </head>
 <body>
 <div class="felt-vignette" aria-hidden="true"></div>
@@ -44,6 +44,11 @@
         <label>大盲 <input type="number" id="cfg-bb" value="200" min="1"></label>
         <label>前注 <input type="number" id="cfg-ante" value="25" min="0"></label>
         <label>起始筹码 <input type="number" id="cfg-stack" value="10000" min="1"></label>
+      </div>
+
+      <div class="setup-row">
+        <span class="inline-label">决赛桌奖金 <span class="tip">（可选，逗号分隔，如 500,300,200）</span></span>
+        <input type="text" id="cfg-payouts" placeholder="留空 = 不启用 ICM" aria-label="决赛桌奖金结构，逗号分隔">
       </div>
 
       <div class="setup-row" id="stack-row">
@@ -95,6 +100,7 @@
     <div class="panel" id="advice-panel" aria-label="决策建议">
       <div class="group-title">建议 <span class="tip" id="advice-note"></span></div>
       <div id="advice" aria-live="polite"><p class="empty">轮到你行动时，这里给出胜率与赔率分析。</p></div>
+      <div id="icm-panel" hidden></div>
     </div>
 
     <div class="panel" id="learn-panel" aria-label="学习进度">
@@ -117,6 +123,6 @@
   v2.3.0 · 仅供复盘、学习与研究 &mdash; 请勿在在线对局中作为实时辅助使用（各平台均视为作弊）。
 </footer>
 
-<script src="app.js?v=20260919i"></script>
+<script src="app.js?v=20260919j"></script>
 </body>
 </html>

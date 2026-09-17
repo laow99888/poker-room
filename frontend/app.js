@@ -44,7 +44,7 @@ function loadConfig() {
       return saved;
     }
   } catch (_) { /* 忽略损坏的存档 */ }
-  return { player_count: 6, sb: 100, bb: 200, ante: 25, stack: 10000, stacks: null };
+  return { player_count: 6, sb: 100, bb: 200, ante: 25, stack: 10000, stacks: null, payouts: [] };
 }
 function saveConfig() {
   try { localStorage.setItem(CONFIG_KEY, JSON.stringify(state.config)); } catch (_) {}
@@ -349,7 +349,7 @@ function renderAdvice() {
     cfrHtml = `
       <div class="cfr-box">
         <div class="cfr-title">第三层 · CFR 均衡参考
-          <span class="cfr-meta">河牌 · ${c.iterations} 次迭代 · ${c.hero_range_combos}×${c.villain_range_combos} 组合${c.range_capped ? "（已抽样）" : ""}</span>
+          <span class="cfr-meta">${c.street || "河牌"}${c.approximate ? "（近似）" : ""} · ${c.iterations} 次迭代 · ${c.hero_range_combos}×${c.villain_range_combos} 组合${c.range_capped ? "（已抽样）" : ""}</span>
         </div>
         ${mixHtml(c.mix)}
         <p class="cfr-note">你的手牌相对对手范围权益约 ${c.equity_vs_range}%（${c.buckets} 桶抽象）。${c.agree ? "与启发式方向一致。" : "与启发式主建议方向不同：此处是范围层面的均衡频率，供交叉参考。"}</p>
@@ -405,7 +405,7 @@ document.addEventListener("keydown", (ev) => {
 function payload() {
   return {
     config: { player_count: state.config.player_count, sb: state.config.sb, bb: state.config.bb, ante: state.config.ante,
-              stacks: currentStacks() },
+              stacks: currentStacks(), payouts: state.config.payouts || [] },
     hero_pos: state.heroPos,
     hero_cards: state.heroCards,
     ops: state.ops,
@@ -615,6 +615,14 @@ $("#cfg-size").addEventListener("change", () => {
   refresh();
 });
 
+$("#cfg-payouts").addEventListener("change", () => {
+  const raw = $("#cfg-payouts").value.trim();
+  const nums = raw ? raw.split(/[，,\s]+/).map(Number).filter((n) => !Number.isNaN(n) && n >= 0) : [];
+  state.config.payouts = nums;
+  saveConfig();
+  refresh();
+});
+
 ["cfg-sb", "cfg-bb", "cfg-ante", "cfg-stack"].forEach((id) =>
   $("#" + id).addEventListener("change", () => {
     state.config = {
@@ -650,7 +658,25 @@ function renderNames() {
   }).join("");
 }
 
+function renderIcm() {
+  const el = $("#icm-panel");
+  if (!el) return;
+  const icm = state.view && state.view.icm;
+  if (!icm) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  if (icm.error) { el.innerHTML = `<p class="footnote">ICM：${icm.error}</p>`; return; }
+  const rows = icm.rows.map((r) =>
+    `<tr class="${r.hero ? "icm-hero" : ""}"><td>${r.pos}${r.hero ? "（你）" : ""}</td>` +
+    `<td>${money(r.stack)}</td><td>${r.pct}%</td><td>${money(r.equity)}</td></tr>`).join("");
+  el.innerHTML = `
+    <div class="icm-title">ICM 奖金期望 <span class="tip">（奖池 ${money(icm.total)} · Malmuth–Harville）</span></div>
+    <table class="icm-table"><thead><tr><th>座位</th><th>记分牌</th><th>份额</th><th>期望奖金</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <p class="footnote">泡沫期中短筹码的边缘牌跟注价值低于记分牌 EV，淘汰风险要计入决策。</p>`;
+}
+
 function renderAll() {
+  renderIcm();
   renderHeroSlots();
   renderNames();
   renderStackInputs();
@@ -668,6 +694,7 @@ $("#cfg-sb").value = state.config.sb;
 $("#cfg-bb").value = state.config.bb;
 $("#cfg-ante").value = state.config.ante;
 $("#cfg-stack").value = state.config.stack;
+$("#cfg-payouts").value = (state.config.payouts || []).join(",");
 state.gridMode = "hero";
 tuneIterations();
 renderAll();

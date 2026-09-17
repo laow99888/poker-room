@@ -41,6 +41,33 @@ def _river_ops(last_is=("BB", "check")):
     return ops
 
 
+def test_cfr_supported_on_flop_and_turn():
+    # 翻牌单挑：BB 过牌后轮到 BTN
+    ops = list(BASE) + [{"op": "board", "cards": FLOP},
+                        {"op": "action", "type": "check", "seat": "BB"}]
+    state, hero_index, _ = replay_state(CFG, "BTN", ["As", "Ad"], ops)
+    adv = advice_for(state, hero_index, 3000, seed=7)
+    c = adv["cfr"]
+    assert c["supported"] is True, c
+    assert c["street"] == "翻牌"
+    assert c["approximate"] is True
+    assert 0 <= c["equity_vs_range"] <= 100
+    total = sum(m["freq"] for m in c["mix"])
+    assert 0.95 <= total <= 1.001, total
+
+    # 转牌单挑：翻牌两过，发转牌后 BB 再过牌
+    ops_turn = ops + [
+        {"op": "action", "type": "check", "seat": "BTN"},
+        {"op": "board", "cards": [TURN]},
+        {"op": "action", "type": "check", "seat": "BB"},
+    ]
+    state2, hero2, _ = replay_state(CFG, "BTN", ["As", "Ad"], ops_turn)
+    adv2 = advice_for(state2, hero2, 3000, seed=7)
+    assert adv2["cfr"]["supported"] is True
+    assert adv2["cfr"]["street"] == "转牌"
+    assert adv2["cfr"]["approximate"] is True
+
+
 def test_cfr_supported_on_heads_up_river():
     state, hero_index, _ = replay_state(CFG, "BTN", ["As", "Ad"], _river_ops())
     adv = advice_for(state, hero_index, 3000, seed=7)

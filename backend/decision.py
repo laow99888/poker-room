@@ -25,14 +25,19 @@ def _action_class(action: str) -> str:
     return "fold"
 
 
-def _cfr_river_block(state, hero_index, hero_cards, hero_combos, villain_combos,
-                     board, recommendation) -> dict:
-    """第三层：河牌 CFR 均衡参考（单挑限定；超预算/不支持时优雅降级，不影响主建议）。"""
+def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos,
+                      board, recommendation) -> dict:
+    """第三层：翻牌/转牌/河牌 CFR 均衡参考（单挑限定；降级时不影响主建议）。
+
+    河牌为精确单街解；翻牌/转牌把剩余牌 rollout 成期望胜率作终值（近似，
+    solve_street 返回 approximate=True）。
+    """
     try:
         live = [i for i in range(state.player_count)
                 if i != hero_index and state.statuses[i]]
-        if len(board) != 5:
-            return {"supported": False, "reason": "CFR 参考目前只支持河牌（5 张公共牌）"}
+        street = {3: "翻牌", 4: "转牌", 5: "河牌"}.get(len(board))
+        if street is None:
+            return {"supported": False, "reason": "CFR 参考从翻牌开始（翻牌/转牌/河牌单挑底池）"}
         if len(live) != 1:
             return {"supported": False, "reason": "CFR 参考仅支持单挑底池"}
         if not hero_combos or not villain_combos:
@@ -50,10 +55,10 @@ def _cfr_river_block(state, hero_index, hero_cards, hero_combos, villain_combos,
         if actual_added:
             hero_range.append(actual)
 
-        res = cfr_mod.solve_river(board, hero_range, villain_combos,
-                                  pot_bb=pot_bb, to_call_bb=to_call_bb,
-                                  stack_bb=stack_bb, bet_sizes=(0.5, 1.0),
-                                  buckets=8, iterations=1600, keep=[actual])
+        res = cfr_mod.solve_street(board, hero_range, villain_combos,
+                                   pot_bb=pot_bb, to_call_bb=to_call_bb,
+                                   stack_bb=stack_bb, bet_sizes=(0.5, 1.0),
+                                   buckets=8, iterations=1600, keep=[actual])
 
         idx = next(i for i, c in enumerate(res["hero_combos"])
                    if frozenset(c) == frozenset(actual))
@@ -98,21 +103,26 @@ def _cfr_river_block(state, hero_index, hero_cards, hero_combos, villain_combos,
 
         heur_top = recommendation["mix"][0]["action"] if recommendation["mix"] else None
         cfr_top = mix[0]["action"] if mix else None
+        s_raw = res["hero_strength"][idx]
+        equity_pct = round((s_raw * 100) if len(board) < 5 else (s_raw + 1) / 2 * 100, 1)
         return {
             "supported": True,
+            "street": street,
             "mix": mix,
             "bucket": bucket,
             "buckets": res["bucket_count"],
             "pairs": res["pairs"],
             "iterations": res["iterations"],
-            "equity_vs_range": round((res["hero_strength"][idx] + 1) / 2 * 100, 1),
+            "equity_vs_range": equity_pct,
             "hero_range_combos": len(res["hero_combos"]),
             "villain_range_combos": len(res["villain_combos"]),
             "range_capped": bool(res.get("hero_capped") or res.get("villain_capped")),
+            "approximate": bool(res.get("approximate")),
             "actual_added": actual_added,
             "agree": (heur_top is not None and cfr_top is not None
                       and _action_class(heur_top) == _action_class(cfr_top)),
-            "note": "CFR+ 均衡参考：双方范围按权益分桶抽象后求解",
+            "note": ("CFR+ 均衡参考：双方范围按权益分桶抽象后求解"
+                     + ("，剩余牌 rollout 成期望终值（近似）" if res.get("approximate") else "")),
         }
     except cfr_mod.CFRError as exc:
         return {"supported": False, "reason": str(exc)}
@@ -492,7 +502,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
         state, hero_index, eq, to_call, pot, required, len(opponents),
         range_adv_val=(range_adv["adv"] if range_adv else None))
 
-    cfr_block = _cfr_river_block(state, hero_index, hero_cards, hero_combos,
+    cfr_block = _cfr_street_block(state, hero_index, hero_cards, hero_combos,
                                  villain_merged, board, recommendation)
 
     return {

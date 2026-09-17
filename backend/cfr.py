@@ -6,14 +6,19 @@
 模块分三部分：
   1. 通用 CFR 引擎（solve_tree / solve_pairs）——与具体扑克规则无关；
   2. 教科书锚点局 kuhn_tree / akq_tree——有精确理论解，用于自校验；
-  3. 河牌单街求解器 solve_river——真实德扑组合 + treys 牌力 + 分桶抽象。
+  3. 真实德扑单街求解器 solve_street / solve_river——treys 牌力 + 分桶抽象。
 
 抽象方式：双方范围先按"对范围平均权益"分成若干桶，CFR 在桶对上迭代；
 每个组合独立成桶时退化为精确解（锚点局正是如此校验）。
+河牌（5 张公共牌）用精确胜负符号；翻牌/转牌把"剩余牌发完的期望胜率"
+ rollout 成桶对终值（固定种子，逐位可复现）——这是近似，接口文档注明。
 纪律：任何接入建议链路的改动，必须先让锚点局收敛到理论解（tests + 推演脚本）。
 """
 
 from __future__ import annotations
+
+import random
+from itertools import combinations
 
 try:
     from treys import Card as _TCard, Evaluator as _Evaluator
@@ -24,7 +29,7 @@ except ImportError:  # pragma: no cover - 环境缺依赖时直接暴露
 
 __all__ = [
     "solve_tree", "solve_pairs", "kuhn_tree", "akq_tree",
-    "solve_river", "CFRError",
+    "solve_river", "solve_street", "CFRError",
 ]
 
 
@@ -66,6 +71,21 @@ def _showdown_net0(v: int, c0: float, c1: float) -> float:
     return (c1 - c0) / 2.0
 
 
+def _showdown_ev(eq: float, c0: float, c1: float) -> float:
+    """摊牌净收益的期望形式：eq ∈ [0,1] 为含平局半分的胜率。
+
+    eq=1/0.5/0 时与 _showdown_net0(+1/0/-1) 完全一致（骨架内摊牌节点 c0==c1）。
+    """
+    ce = c0 if c0 < c1 else c1
+    return eq * c1 - (1.0 - eq) * ce
+    ce = c0 if c0 < c1 else c1
+    if v > 0:
+        return c1
+    if v < 0:
+        return -ce
+    return (c1 - c0) / 2.0
+
+
 def _cfr(node, u: int, p0: float, p1: float, i: int, j: int, vmat, tables: dict, t: int) -> float:
     """一次遍历。返回子树在传入 reach 下的期望值（座位 0 视角）。"""
     kind = node["kind"]
@@ -74,6 +94,8 @@ def _cfr(node, u: int, p0: float, p1: float, i: int, j: int, vmat, tables: dict,
     if kind == "fold":
         return node["net0"]
     if kind == "showdown":
+        if node.get("eq"):
+            return _showdown_ev(vmat[i][j], node["c0"], node["c1"])
         return _showdown_net0(vmat[i][j], node["c0"], node["c1"])
     if kind == "chance":
         s = 0.0
@@ -357,26 +379,32 @@ def solve_river(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: f
     }
 
 
-def _bucket_assign(combos, vmat_rows, n_buckets):
-    """按对范围平均权益分桶（0 = 最强）。返回 (每组合桶号, 实际桶数, 平均权益)。"""
+def _bucket_assign(combos, vmat_rows, n_buckets, strengths=None):
+    """按对范围平均权益分桶（0 = 最强）。返回 (每组合桶号, 实际桶数, 平均权益)。
+
+    strengths 提供时直接采用（多街 rollout 路径已算好 [0,1] 期望胜率）。
+    """
     n = len(combos)
     n_buckets = max(1, min(n_buckets, n))
-    strength = []
-    for i in range(n):
-        vals = [v for v in vmat_rows[i] if v is not None]
-        strength.append(sum(vals) / len(vals) if vals else 0.0)
-    order = sorted(range(n), key=lambda i: (-strength[i], combos[i]))
+    if strengths is None:
+        strengths = []
+        for i in range(n):
+            vals = [v for v in vmat_rows[i] if v is not None]
+            strengths.append(sum(vals) / len(vals) if vals else 0.0)
+    order = sorted(range(n), key=lambda i: (-strengths[i], combos[i]))
     bucket = [0] * n
     for rank, i in enumerate(order):
         bucket[i] = min(rank * n_buckets // n, n_buckets - 1)
-    return bucket, n_buckets, strength
+    return bucket, n_buckets, strengths
 
 
 def _skeleton(facing: bool, c0: float, c1: float, stack: float,
-              bet_sizes, raise_size: float, max_raises: int = 1):
-    """河牌行动骨架（与具体组合无关，逐桶对共享）。面额统一为 BB。
+              bet_sizes, raise_size: float, max_raises: int = 1,
+              eq_terminal: bool = False):
+    """单街行动骨架（与具体组合无关，逐桶对共享）。面额统一为 BB。
 
-    行动标签：check / bet / call / fold / raise（多个下注尺度时为 bet:P/2 等）。
+    行动标签：check / bet / call / fold / raise（多个下注尺度时为 bet:P×f 等）。
+    eq_terminal=True 时摊牌节点终值为期望胜率 [0,1]（多街 rollout），否则 ±1 符号。
     """
     def build(actor, a, b, raises, hist, facing_):
         committed = a if actor == 0 else b
@@ -394,7 +422,7 @@ def _skeleton(facing: bool, c0: float, c1: float, stack: float,
             children.append({"kind": "fold",
                              "net0": b if actor == 1 else -a})
             labels.append("call")
-            children.append({"kind": "showdown", "c0": opp_committed, "c1": opp_committed})
+            children.append({"kind": "showdown", "c0": opp_committed, "c1": opp_committed, **({"eq": True} if eq_terminal else {})})
             if raises < max_raises:
                 extra = stack - committed
                 target = opp_committed + raise_size * (a + b)
@@ -409,7 +437,7 @@ def _skeleton(facing: bool, c0: float, c1: float, stack: float,
 
         labels.append("check")
         if hist.endswith("k"):  # 双方连续过牌 → 摊牌
-            children.append({"kind": "showdown", "c0": a, "c1": b})
+            children.append({"kind": "showdown", "c0": a, "c1": b, **({"eq": True} if eq_terminal else {})})
         else:
             children.append(build(1 - actor, a, b, raises, hist + "k", False))
         extra = stack - committed
@@ -428,4 +456,188 @@ def _skeleton(facing: bool, c0: float, c1: float, stack: float,
         return act_node()
 
     return build(0, c0, c1, 0, "", facing)
+
+
+# ---------------------------------------------------------------------------
+# 翻牌/转牌多街求解（rollout 终值 + 同一套分桶骨架）
+# ---------------------------------------------------------------------------
+
+_ROLLOUT_SEED = 20260919   # 固定种子：rollout 抽样逐位可复现
+
+
+_ALL52 = tuple(r + s for s in "shdc" for r in "AKQJT98765432")
+
+
+def _rollout_eq(hero_combo, villain_combo, board, samples, rand):
+    """发完剩余公共牌后的胜率（平局记 0.5）；组合冲突返回 None。
+
+    死牌约定：只排除公共牌与这一对组合（对每对组合是干净的边际胜率）。
+    剩余牌组合数 ≤ samples 时全枚举（精确），否则固定种子随机抽样。
+    """
+    if set(hero_combo) & set(villain_combo):
+        return None
+    need = 5 - len(board)
+    board_t = [_t(c) for c in board]
+    h0, h1 = _t(hero_combo[0]), _t(hero_combo[1])
+    v0, v1 = _t(villain_combo[0]), _t(villain_combo[1])
+
+    def win_on(b):
+        hr = _EVAL.evaluate(b, [h0, h1])
+        vr = _EVAL.evaluate(b, [v0, v1])
+        return 1.0 if hr < vr else (0.0 if hr > vr else 0.5)
+
+    if need <= 0:
+        return win_on(board_t)
+    dead = set(board) | set(hero_combo) | set(villain_combo)
+    deck_t = [_t(c) for c in _ALL52 if c not in dead]
+    n_comb = 1
+    for k in range(need):
+        n_comb = n_comb * (len(deck_t) - k) // (k + 1)
+    if n_comb <= samples:   # 全枚举
+        wins, n = 0.0, 0
+        for run in combinations(deck_t, need):
+            wins += win_on(board_t + list(run))
+            n += 1
+        return wins / n
+    wins = 0.0
+    for _ in range(samples):
+        wins += win_on(board_t + rand.sample(deck_t, need))
+    return wins / samples
+
+
+def solve_street(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: float = 0.0,
+                 stack_bb: float = 10.0, bet_sizes=(1.0,), raise_size: float = 1.0,
+                 buckets: int = 8, iterations: int = 1200,
+                 range_cap: int = 120, keep=(),
+                 probe_runouts: int = 8, pair_runouts: int = 24,
+                 pair_samples: int = 10) -> dict:
+    """单街求解总入口：河牌（5 张）直接走 solve_river 精确路径；
+    翻牌（3 张）/转牌（4 张）把"剩余牌随机发完的期望胜率" rollout 成桶对终值。
+
+    近似说明：rollout 把后续街的博弈权益压缩成一个静态期望值（不含未来街的行动
+    价值），胜率本身由固定种子抽样估计——同参数结果逐位可复现，方向与教科书
+    定理一致，但不是该街的精确纳什均衡。
+    """
+    if _TCard is None:
+        raise CFRError("缺少 treys 依赖")
+    if len(board) == 5:
+        return solve_river(board, hero_combos, villain_combos, pot_bb=pot_bb,
+                           to_call_bb=to_call_bb, stack_bb=stack_bb,
+                           bet_sizes=tuple(bet_sizes), raise_size=raise_size,
+                           buckets=buckets, iterations=iterations,
+                           range_cap=range_cap, keep=keep)
+    if len(board) not in (3, 4):
+        raise CFRError("多街求解只支持翻牌（3 张）或转牌（4 张）公共牌")
+    if pot_bb <= 0 or to_call_bb < 0 or stack_bb <= 0:
+        raise CFRError("底池、跟注额与有效筹码必须为正")
+
+    hero_all = sorted({tuple(c) for c in hero_combos if not (set(c) & set(board))})
+    villain_all = sorted({tuple(c) for c in villain_combos if not (set(c) & set(board))})
+    if not hero_all or not villain_all:
+        raise CFRError("过滤死牌后范围为空，无法求解")
+
+    board_t = [_t(c) for c in board]
+    keep_set = {frozenset(c) for c in keep}
+    rand = random.Random(_ROLLOUT_SEED)
+
+    def strength(combos, opponent):
+        step = max(1, len(opponent) // 20)
+        probe = opponent[::step][:20]
+        out = []
+        for c in combos:
+            vals = [_rollout_eq(c, p, board, probe_runouts, rand)
+                    for p in probe]
+            vals = [v for v in vals if v is not None]
+            out.append(sum(vals) / len(vals) if vals else 0.0)
+        return out
+
+    hero, _, _ = _stratified_subset_rollout(hero_all, villain_all, board,
+                                            rand, probe_runouts, range_cap)
+    for c in hero_all:                      # keep 的组合丢失时补回（换掉末位）
+        if frozenset(c) in keep_set and c not in hero:
+            hero[-1] = c
+            hero.sort()
+            break
+    villain, _, _ = _stratified_subset_rollout(villain_all, hero_all, board,
+                                               rand, probe_runouts, range_cap)
+
+    nh, nv = len(hero), len(villain)
+    hero_strength = strength(hero, villain)
+    villain_strength = strength(villain, hero)
+    hero_bucket, nb_h, _ = _bucket_assign(hero, None, buckets, strengths=hero_strength)
+    villain_bucket, nb_v, _ = _bucket_assign(villain, None, buckets, strengths=villain_strength)
+    nb = max(nb_h, nb_v)
+
+    # 桶对终值：每对桶抽样若干组合对做 rollout 取平均；权重 = 桶内合法组合对数
+    hmap = {b: [i for i in range(nh) if hero_bucket[i] == b] for b in range(nb_h)}
+    vmap = {b: [j for j in range(nv) if villain_bucket[j] == b] for b in range(nb_v)}
+    bvmat = [[0.0] * nb_v for _ in range(nb)]
+    cnt = [[0] * nb_v for _ in range(nb)]
+    for x in range(nb_h):
+        for y in range(nb_v):
+            legal = [(i, j) for i in hmap.get(x, []) for j in vmap.get(y, [])
+                     if not (set(hero[i]) & set(villain[j]))]
+            if not legal:
+                continue
+            k = min(pair_samples, len(legal))
+            picks = {legal[round(t * (len(legal) - 1) / (k - 1))] for t in range(k)} \
+                if k > 1 else {legal[0]}
+            vals = [_rollout_eq(hero[i], villain[j], board,
+                                pair_runouts, rand) for i, j in picks]
+            bvmat[x][y] = sum(vals) / len(vals)
+            cnt[x][y] = len(legal)
+    pairs = []
+    for x in range(nb):
+        for y in range(nb_v):
+            if cnt[x][y]:
+                pairs.append((cnt[x][y], x, y))
+    total = sum(w for w, _, _ in pairs)
+    pairs = [(w / total, x, y) for w, x, y in pairs]
+    if not pairs:
+        raise CFRError("英雄与对手范围完全冲突，无法求解")
+
+    base = max(0.0, (pot_bb - to_call_bb) / 2.0)
+    c0 = base
+    c1 = base + max(0.0, to_call_bb)
+    stack_bb = max(stack_bb, c0, c1)
+    skeleton = _skeleton(to_call_bb > 1e-9, c0, c1, stack_bb,
+                         tuple(bet_sizes), raise_size, max_raises=1, eq_terminal=True)
+
+    avg = solve_pairs(skeleton, pairs, bvmat, iterations=iterations)
+    return {
+        "hero_combos": hero,
+        "villain_combos": villain,
+        "hero_bucket": hero_bucket,
+        "villain_bucket": villain_bucket,
+        "bucket_count": nb,
+        "hero_strength": hero_strength,      # [0,1] 期望胜率（rollout 近似）
+        "villain_strength": villain_strength,
+        "pairs": len(pairs),
+        "avg_strategy": avg,
+        "iterations": iterations,
+        "hero_capped": len(hero) < len(hero_all),
+        "villain_capped": len(villain) < len(villain_all),
+        "root_labels": skeleton["labels"],
+        "skeleton": skeleton,
+        "approximate": True,
+    }
+
+
+def _stratified_subset_rollout(combos, opponent, board, rand,
+                               runouts: int, limit: int):
+    """多街版分层抽样：按 rollout 探测权益等距取样（确定性）。"""
+    n = len(combos)
+    if n <= limit:
+        return combos, [0.0] * n, False
+    step = max(1, len(opponent) // 20)
+    probe = opponent[::step][:20]
+    strength = []
+    for c in combos:
+        vals = [_rollout_eq(c, p, board, runouts, rand) for p in probe]
+        vals = [v for v in vals if v is not None]
+        strength.append(sum(vals) / len(vals) if vals else 0.0)
+    order = sorted(range(n), key=lambda i: (-strength[i], combos[i]))
+    k = min(limit, n)
+    picks = sorted({order[round(i * (n - 1) / (k - 1))] for i in range(k)})
+    return [combos[i] for i in picks], strength, True
 
