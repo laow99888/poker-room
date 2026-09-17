@@ -104,19 +104,27 @@ def build_state(config: dict) -> "NoLimitTexasHoldem":
         random.setstate(rng_state)
 
 
-def deal_hole(state, hero_index: int, hero_cards) -> dict:
+def deal_hole(state, hero_index: int, hero_cards, reserve=()) -> dict:
     """发底牌：英雄拿真实手牌，其余座位发确定性占位牌。
 
-    返回 {座位索引: [牌, 牌]}（英雄为真实牌，其余为占位，仅供引擎结算）。
+    reserve：操作序列里声明的公共牌——占位牌必须避开，否则真实牌谱
+    会被模拟占位锁死（占位牌只是驱动状态机的虚构牌，不是观察事实）。
+    返回 {座位索引: [牌, 牌]}（英雄为真实牌，其余为占位）。
     """
     used = set()
     hero_cards = [_parse_card(c, used) for c in hero_cards]
     if len(hero_cards) != 2:
         raise TableError("底牌必须是 2 张")
+    declared_board = set()
+    for c in reserve:
+        declared_board.add(_parse_card(c, used))
     n = state.player_count
     dealt = {i: [] for i in range(n)}
     fillers = [c for c in _ALL_CARDS if c not in used]
     random.Random(_FILLER_SEED).shuffle(fillers)
+    needed = 2 * n - len(hero_cards)
+    if len(fillers) < needed:
+        raise TableError("声明的公共牌过多，剩余牌不够发占位牌")
     order = [seat for _round in range(2) for seat in range(n)]  # SB→BTN 两圈
     for seat in order:
         if seat == hero_index:
@@ -128,7 +136,7 @@ def deal_hole(state, hero_index: int, hero_cards) -> dict:
     return dealt
 
 
-def apply_ops(state, ops) -> None:
+def apply_ops(state, ops, dealt=None, hero_index=None) -> None:
     """按序回放操作（行动 / 发公共牌），任何非法步骤抛 TableError。"""
     for idx, op in enumerate(ops, start=1):
         kind = op.get("op")
@@ -136,7 +144,7 @@ def apply_ops(state, ops) -> None:
             if kind == "action":
                 _apply_action(state, op)
             elif kind == "board":
-                _apply_board(state, op)
+                _apply_board(state, op, dealt, hero_index)
             else:
                 raise TableError(f"未知操作类型：{kind!r}")
         except TableError:
@@ -165,9 +173,14 @@ def _apply_action(state, op) -> None:
         to = op.get("to")
         if to is None:
             raise TableError("加注需要 to（加注到多少）")
-        to = int(to)
+        try:
+            to = int(to)
+        except (TypeError, ValueError) as exc:
+            raise TableError(f"加注数额非法：{to!r}") from exc
         lo = state.min_completion_betting_or_raising_to_amount
         hi = state.max_completion_betting_or_raising_to_amount
+        if lo is None or hi is None:
+            raise TableError(f"{positions[actor]} 当前没有加注权（面对全下只能跟注/弃牌）")
         if not lo <= to <= hi:
             hint = "（此数额即全下）" if to == hi else ""
             raise TableError(
@@ -181,7 +194,7 @@ def _apply_action(state, op) -> None:
         raise TableError(f"未知动作：{kind!r}")
 
 
-def _apply_board(state, op) -> None:
+def _apply_board(state, op, dealt=None, hero_index=None) -> None:
     cards = op.get("cards")
     if not isinstance(cards, list) or not cards:
         raise TableError("发牌操作需要 cards 列表")
@@ -191,17 +204,26 @@ def _apply_board(state, op) -> None:
         raise TableError("当前还在翻牌前，下注结束后才能发公共牌")
     if len(cards) != expect:
         raise TableError(f"{street} 应一次发 {expect} 张，收到 {len(cards)} 张")
-    # 只有牌堆里剩下的牌可发；其余都在某人底牌、弃牌或烧牌里
-    dealable = {repr(c) for c in state.get_dealable_cards()}
+    # 真实观察到的公共牌只需与"任何人底牌 + 已发公共牌"不冲突。
+    # 占位牌已在回放开始时避开声明的公共牌；撞上模拟烧牌时报清晰错误。
+    occupied = set()
+    if dealt:
+        for cards_i in dealt.values():
+            occupied.update(cards_i)
+    occupied.update(repr(c) for street_i in state.board_cards for c in street_i)
     clean = []
     for c in cards:
         code = repr(c).strip() if not isinstance(c, str) else str(c).strip()
-        if code not in dealable:
+        if code in occupied:
             raise TableError(
-                f"牌 {code} 已不在牌堆里（它可能在某个玩家的底牌中）——换一张试试"
-            )
+                f"牌 {code} 已在牌局中（某人底牌或已发出的公共牌），不能再次发出")
         clean.append(PKCard(code[0], code[1]))
-    state.deal_board(tuple(clean))
+    try:
+        state.deal_board(tuple(clean))
+    except ValueError as exc:
+        raise TableError(
+            f"公共牌 {cards} 与模拟发牌的烧牌撞车（占位推演的固有边界）：{exc}"
+        ) from exc
 
 
 def hand_view(state, hero_index: int, dealt: dict) -> dict:
@@ -219,10 +241,18 @@ def hand_view(state, hero_index: int, dealt: dict) -> dict:
         })
     actor = positions[state.actor_index] if state.actor_index is not None else None
     street = STREETS[state.street_index] if state.street_index is not None else "over"
-    # 不可再被选中的牌 = 全副牌 - 牌堆剩余（含底牌、弃牌、烧牌、已发出的公共牌）
+    # 不可再被选中的牌 = 底牌/烧牌/已发公共牌，但不含占位牌——
+    # 占位牌会在下一次回放时避开用户声明的公共牌，不能锁死选牌。
     dealable = {repr(c) for c in state.get_dealable_cards()}
-    taken = sorted(c for c in _ALL_CARDS if c not in dealable)
+    filler_cards = set()
+    for i, cards_i in dealt.items():
+        if i != hero_index:
+            filler_cards.update(cards_i)
+    taken = sorted(c for c in _ALL_CARDS
+                   if c not in dealable and c not in filler_cards)
+    simulated = bool(filler_cards)
     view = {
+        "simulated": simulated,
         "positions": list(positions),
         "street": street,
         "board": [repr(c) for street in state.board_cards for c in street],
@@ -267,6 +297,12 @@ def replay_state(config: dict, hero_pos: str, hero_cards, ops):
         raise TableError(f"未知座位：{hero_pos!r}，可选 {list(positions)}")
     hero_index = positions.index(hero_pos)
     state = build_state(config)
-    dealt = deal_hole(state, hero_index, hero_cards)
-    apply_ops(state, ops)
+    declared = []
+    for op in (ops or []):
+        if isinstance(op, dict) and op.get("op") == "board":
+            cards = op.get("cards") or []
+            if isinstance(cards, list):
+                declared.extend(str(c).strip() for c in cards)
+    dealt = deal_hole(state, hero_index, hero_cards, reserve=declared)
+    apply_ops(state, ops, dealt, hero_index)
     return state, hero_index, dealt

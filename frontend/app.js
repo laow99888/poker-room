@@ -102,7 +102,7 @@ function renderGrid() {
 function updateDeckTip() {
   const tip = $("#deck-tip");
   if (!tip) return;
-  if (state.gridMode === "board") {
+  if (state.gridMode === "board" && state.view) {
     const need = STREET_DEAL[state.view.street] || 0;
     tip.textContent = `（点选 ${need} 张公共牌：已选 ${state.boardPicks.length}/${need}，金框为已选）`;
   } else {
@@ -453,13 +453,17 @@ async function refreshCore(retries = 0) {
     });
     const data = await r.json();
     if (!r.ok) {
-      // 自愈：最后一步操作非法（常见于连点），撤销后重试
-      if (state.ops.length > 0 && retries < 3) {
+      // 10：只有"该步非法"(400) 才撤销自愈；服务/网络故障必须保留历史
+      if (AppLogic.shouldRollbackOn(r.status) && state.ops.length > 0 && retries < 3) {
         state.ops.pop();
         state.busy = false;
         return refreshCore(retries + 1);
       }
-      showError((data.detail || `请求失败（${r.status}）`) + "（可点「撤销上一步」回退）");
+      if (r.status === 400) {
+        showError((data.detail || `请求失败（${r.status}）`) + "（可点「撤销上一步」回退）");
+      } else {
+        showError(`服务暂不可用（${r.status}）——你的操作记录已保留，稍后重试即可`);
+      }
       state.busy = false;
       renderAll();
       return;
@@ -469,21 +473,33 @@ async function refreshCore(retries = 0) {
     state.advice = null;
     state.busy = false;
     if (data.hand_over && !state.recorded) {
-      state.recorded = true;
+      // 04：只有服务确认入库才算已记录；失败保留状态并明示，允许后续重试
       fetch("/api/stats/record", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload()),
-      }).then(() => refreshLearn()).catch(() => {});
+      }).then((rr) => {
+        if (rr.ok) {
+          state.recorded = true;
+          refreshLearn();
+        } else {
+          showError("学习数据记录失败（服务未确认），本手可能未计入统计");
+        }
+      }).catch(() => showError("学习数据记录失败（网络异常），本手可能未计入统计"));
     }
     renderAll();
     if (data.actor === state.heroPos && !data.hand_over) {
+      const snap = AppLogic.handKey(state);
       const r2 = await fetch("/api/hand/advice", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload()),
       });
       if (r2.ok) {
-        state.advice = (await r2.json()).advice;
-        renderAdvice();
+        const advice = (await r2.json()).advice;
+        // 09：等待期间牌局变了（撤销/重开/又走了一步），旧响应必须丢弃
+        if (AppLogic.sameHand(snap, AppLogic.handKey(state))) {
+          state.advice = advice;
+          renderAdvice();
+        }
       }
     }
   } catch (_) {
@@ -562,8 +578,8 @@ document.addEventListener("click", (ev) => {
       // 全新重开：筹码恢复默认 + 清空手牌与操作记录
       state.config.stacks = null;
       saveConfig();
-      state.ops = []; state.heroCards = [null, null]; state.view = null;
-      state.advice = null; state.pending = null; state.error = null; state.gridMode = "hero";
+      resetHandState();
+      state.gridMode = "hero";
       refresh();
       return;
     case "stats-reset":
@@ -573,8 +589,8 @@ document.addEventListener("click", (ev) => {
       return;
     case "undo": state.ops.pop(); state.pending = null; state.gridMode = null; state.boardPicks = []; renderGrid(); renderBoard(); updateDeckTip(); refresh(); return;
     case "reset":
-      state.ops = []; state.heroCards = [null, null]; state.view = null;
-      state.advice = null; state.pending = null; state.recorded = false; state.gridMode = "hero";
+      resetHandState();
+      state.gridMode = "hero";
       refresh(); return;
   }
 });
@@ -608,8 +624,7 @@ $("#cfg-size").addEventListener("change", () => {
   saveConfig();
   tuneIterations();
   rebuildPosOptions(state.config.player_count);
-  state.ops = []; state.heroCards = [null, null]; state.view = null;
-  state.advice = null; state.pending = null; state.error = null;
+  resetHandState();
   refresh();
 });
 
@@ -623,24 +638,21 @@ $("#cfg-payouts").addEventListener("change", () => {
 
 ["cfg-sb", "cfg-bb", "cfg-ante", "cfg-stack"].forEach((id) =>
   $("#" + id).addEventListener("change", () => {
-    state.config = {
-      player_count: state.config.player_count,
-      sb: Number($("#cfg-sb").value) || 100,
-      bb: Number($("#cfg-bb").value) || 200,
-      ante: Number($("#cfg-ante").value) || 0,
-      stack: Number($("#cfg-stack").value) || 10000,
-      stacks: null,
-    };
+    // 13：按字段更新而不是整体重建——payouts 等其他配置不能被静默丢掉
+    state.config.sb = Number($("#cfg-sb").value) || 100;
+    state.config.bb = Number($("#cfg-bb").value) || 200;
+    state.config.ante = Number($("#cfg-ante").value) || 0;
+    state.config.stack = Number($("#cfg-stack").value) || 10000;
+    state.config.stacks = null;
     saveConfig();
-    state.ops = []; state.heroCards = [null, null]; state.view = null; state.advice = null;
+    resetHandState();
     refresh();
   })
 );
 
 $("#cfg-pos").addEventListener("change", () => {
   state.heroPos = $("#cfg-pos").value;   // 只换座位，手牌保留，设置顺序无关
-  state.ops = []; state.view = null; state.advice = null; state.pending = null;
-  state.recorded = false;
+  resetHandState({ keepCards: true });
   renderNames();
   refresh();
 });
@@ -671,6 +683,15 @@ function renderIcm() {
     <table class="icm-table"><thead><tr><th>座位</th><th>记分牌</th><th>份额</th><th>期望奖金</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <p class="footnote">泡沫期中短筹码的边缘牌跟注价值低于记分牌 EV，淘汰风险要计入决策。</p>`;
+}
+
+function resetHandState({ keepCards = false } = {}) {
+  // 13：所有"重开一手"语义的唯一入口——集中清理，防止遗漏 recorded/选牌/挂起请求
+  state.ops = [];
+  if (!keepCards) state.heroCards = [null, null];
+  state.view = null; state.advice = null; state.pending = null;
+  state.error = null; state.gridMode = null; state.boardPicks = [];
+  state.recorded = false;
 }
 
 function renderZoneFocus() {

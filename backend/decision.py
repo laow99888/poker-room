@@ -148,10 +148,14 @@ def player_intel(state) -> dict:
     raised = {i: False for i in range(n)}
     global_raises = 0
 
+    preflop = True
     for op in state.operations:
         nm = type(op).__name__
+        if nm == "BoardDealing":     # 公共牌开出后进入翻后：不再计入翻前分类
+            preflop = False
+            continue
         i = getattr(op, "player_index", None)
-        if i is None:
+        if i is None or not preflop:
             continue
         if nm == "CompletionBettingOrRaisingTo":
             if first_raise_order[i] is None:
@@ -186,6 +190,8 @@ def player_intel(state) -> dict:
             line = kind = "fold_raise"
         elif folded_free[i]:
             line = kind = "fold_free"
+        elif checked_free[i]:
+            line = kind = "check"
         else:
             line = kind = "pending"
         intel[i] = {"line": line, "kind": kind}
@@ -230,6 +236,8 @@ def _chen_score(combo) -> float:
     ra, rb = combo[0][0], combo[1][0]
     suited = combo[0][1] == combo[1][1]
 
+    _LOW = {"T": 5, "9": 4.5, "8": 4, "7": 3.5, "6": 3,
+            "5": 2.5, "4": 2, "3": 1.5, "2": 1}
     def val(r):
         if r == "A":
             return 10
@@ -239,7 +247,7 @@ def _chen_score(combo) -> float:
             return 7
         if r == "J":
             return 6
-        return (_RANK_ORDER_FULL.index(r) + 2) / 2
+        return _LOW[r]
 
     hi, lo = max(val(ra), val(rb)), min(val(ra), val(rb))
     if ra == rb:
@@ -411,6 +419,24 @@ def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponen
     }
 
 
+def _eligible_pot(state, hero_index: int, to_call: int) -> int:
+    """英雄跟注后有权争夺的底池（短码边池感知）。
+
+    每个对手（含已弃牌者，他们的钱仍在池里）最多只能被赢走
+    min(其已投入, 英雄跟注后的总投入)；超出部分在更深筹码的边池里，
+    英雄根本无权染指。06：跟注赔率与 EV 都必须用这个口径。
+    """
+    start = state.starting_stacks
+    contrib = {i: max(0, start[i] - state.stacks[i]) for i in range(state.player_count)}
+    hero_total = contrib[hero_index] + to_call
+    eligible = 0
+    for i in range(state.player_count):
+        if i == hero_index:
+            continue
+        eligible += min(contrib[i], hero_total)
+    return eligible
+
+
 def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -> dict:
     """计算英雄当前决策建议（必须轮到英雄行动）。"""
     if state.status is False:
@@ -473,9 +499,10 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None) -
 
     to_call = state.checking_or_calling_amount
     pot = state.total_pot_amount
-    required = round(to_call * 100 / (pot + to_call), 2) if to_call > 0 else 0.0
-    eff = eq["win"] + eq["tie"] / 2
-    ev_call = round(eff / 100 * pot - (1 - eff / 100) * to_call, 2)
+    eligible = _eligible_pot(state, hero_index, to_call)
+    required = round(to_call * 100 / (eligible + to_call), 2) if to_call > 0 else 0.0
+    eff = eq.get("equity", eq["win"] + eq["tie"] / 2)
+    ev_call = round(eff / 100 * (eligible + to_call) - to_call, 2)
 
     bb = state.blinds_or_straddles[1]
     ante = state.antes[0]

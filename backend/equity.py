@@ -94,6 +94,8 @@ def validate_inputs(hero, villains, board):
                 raise EquityError(f"对手 {idx} 的权重数与组合数不一致")
             cleaned = []
             for pair in pairs:
+                if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                    raise EquityError(f"对手 {idx} 的组合必须是恰好两张牌：{pair!r}")
                 local: set = set()
                 a = _parse_card(pair[0], local)
                 b = _parse_card(pair[1], local)
@@ -141,7 +143,12 @@ def simulate(hero, villains, board, iterations, seed=None):
     base_deck = [c for c in ALL_CARDS if c not in used]
 
     def score_trial(full_board, extra_hands=()):
-        """评估一次对局，返回 (胜, 平, 负) 的 0/1 计数。"""
+        """评估一次对局，返回 (胜, 平, 负) 计数与英雄的底池份额。
+
+        份额：英雄赢 → 1/平分人数；输 → 0。多人平分底池时
+        win+tie/2 会高估权益（三家平分得 50%，真实份额 1/3），
+        因此所有 EV 计算必须用份额。
+        """
         scores = [_score(hero_cards + full_board)]
         for hand in fixed_hands:
             scores.append(_score([_card(c) for c in hand] + full_board))
@@ -149,55 +156,81 @@ def simulate(hero, villains, board, iterations, seed=None):
             scores.append(_score([_card(c) for c in hand] + full_board))
         best = max(scores)
         if scores[0] < best:
-            return (0, 0, 1)
-        return (1, 0, 0) if scores.count(best) == 1 else (0, 1, 0)
+            return (0, 0, 1), 0.0
+        if scores.count(best) == 1:
+            return (1, 0, 0), 1.0
+        return (0, 1, 0), 1.0 / scores.count(best)
+
+    # --- 01：范围池预过滤死牌（英雄/公共牌/明手），消除"永远撞车"的死循环来源 ---
+    known = used
+    filtered_pools = []
+    for pool in range_pools:
+        keep = [(pair, w) for pair, w in pool if pair[0] not in known and pair[1] not in known]
+        if not keep:
+            raise EquityError(
+                "对手范围的全部组合都与已知牌（底牌/公共牌）冲突，无法计算")
+        filtered_pools.append(keep)
 
     exact = False
-    wins = ties = losses = 0
+    wins = ties = losses = 0.0
+    share_sum = 0.0
     trials = iterations
 
-    if not range_pools and need_board == 0:
-        wins, ties, losses = score_trial(board_cards)
+    if not filtered_pools and need_board == 0:
+        (wins, ties, losses), sh = score_trial(board_cards)
+        share_sum = sh
         exact, trials = True, 1
-    elif not range_pools and need_board == 1:
-        for extra in base_deck:
-            w, t, l = score_trial(board_cards + [_card(extra)])
-            wins += w
-            ties += t
-            losses += l
+    elif not filtered_pools and need_board == 1:
+        for extra in sorted(base_deck):   # 18：固定牌序，set 不直接进抽样
+            (w, t, l), sh = score_trial(board_cards + [_card(extra)])
+            wins += w; ties += t; losses += l
+            share_sum += sh
         exact, trials = True, len(base_deck)
     else:
+        # --- 01：联合拒绝采样。任一对手撞牌就整组重抽（不是只重抽后一家），
+        # 保证合法联合分布与对手顺序无关；带尝试上限，不可能时明确报错。
+        failed = 0
         for _ in range(iterations):
-            avail_set = set(base_deck)
-            villain_hands = []
-            for pool in range_pools:
-                while True:
+            for _attempt in range(50):
+                avail_set = set(base_deck)
+                villain_hands = []
+                ok_trial = True
+                for pool in filtered_pools:
                     pairs = [p for p, _ in pool]
                     weights = [w for _, w in pool]
                     c1, c2 = rng.choices(pairs, weights=weights)[0]
-                    # range 组合可能撞上已发出的牌，撞了就重抽（与真实发牌等价：
-                    # 冲突的组合本来就不可能同时出现）
                     if c1 in avail_set and c2 in avail_set:
                         avail_set.discard(c1)
                         avail_set.discard(c2)
                         villain_hands.append([c1, c2])
+                    else:
+                        ok_trial = False
                         break
-
-            avail = list(avail_set)
+                if ok_trial:
+                    break
+            else:
+                failed += 1
+                continue   # 该次试验 50 次都没抽出合法联合 → 跳过并计数
+            avail = sorted(avail_set)   # 18：不把 set 的遍历序交给抽样
             full_board = board_cards + [_card(c) for c in rng.sample(avail, need_board)]
-            w, t, l = score_trial(full_board, villain_hands)
-            wins += w
-            ties += t
-            losses += l
+            (w, t, l), sh = score_trial(full_board, villain_hands)
+            wins += w; ties += t; losses += l
+            share_sum += sh
+        if failed > iterations // 2:
+            raise EquityError(
+                "对手范围与已知牌联合冲突过多，无法采样（检查范围是否与公共牌/底牌矛盾）")
 
     total = wins + ties + losses
+    eff_trials = total if total else 1
     result = {
         "engine": ENGINE,
         "exact": exact,
         "iterations": trials,
         "elapsedMs": int((time.perf_counter() - start) * 1000),
-        "win": round(wins * 100 / total, 2),
-        "tie": round(ties * 100 / total, 2),
-        "lose": round(losses * 100 / total, 2),
+        "win": round(wins * 100 / eff_trials, 2),
+        "tie": round(ties * 100 / eff_trials, 2),
+        "lose": round(losses * 100 / eff_trials, 2),
+        # 06：真实底池份额（多人平分正确），EV/所需胜率一律用它
+        "equity": round(share_sum * 100 / eff_trials, 2),
     }
     return result

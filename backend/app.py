@@ -1,9 +1,10 @@
 """本地 FastAPI 应用：/api/equity + /api/hand/* + 静态前端，全程离线（绑定 127.0.0.1）。"""
 
+import os
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -65,7 +66,8 @@ def equity_api(payload: EquityIn):
             iterations=payload.iterations,
             seed=payload.seed,
         )
-    except (equity.EquityError, InvalidHandError) as exc:
+    except (equity.EquityError, InvalidHandError, ValueError, TypeError,
+            KeyError, IndexError) as exc:
         raise HTTPException(400, str(exc))
 
 
@@ -95,7 +97,8 @@ def _replay_or_400(payload: HandIn):
     try:
         return replay_state(_config_dump(payload.config), payload.hero_pos,
                             payload.hero_cards, payload.ops)
-    except TableError as exc:
+    except (TableError, ValueError, TypeError, KeyError, IndexError) as exc:
+        # 非法输入/非法操作是客户端错误：必须稳定 4xx，不允许逃逸成 500
         raise HTTPException(400, str(exc))
 
 
@@ -155,9 +158,9 @@ def stats_record_api(payload: HandIn):
     state, hero_index, _ = _replay_or_400(payload)
     if state.status:
         raise HTTPException(400, "手牌尚未结束，无法记录")
-    lines = decision._classify_lines(state)
+    intel = decision.player_intel(state)
     result = opponents.record_hand(_config_dump(payload.config), payload.ops,
-                                   payload.names, lines, hero_index=hero_index)
+                                   payload.names, intel, hero_index=hero_index)
     return {"recorded": result}
 
 
@@ -167,7 +170,13 @@ def stats_get_api(name: str):
 
 
 @app.post("/api/stats/reset")
-def stats_reset_api():
+def stats_reset_api(request: Request):
+    # 11：本地工具模式随便用；公开部署时仅允许本机或持 POKER_ADMIN_TOKEN 的调用
+    client = request.client.host if request.client else ""
+    token = os.environ.get("POKER_ADMIN_TOKEN", "")
+    if client not in ("127.0.0.1", "::1", "testclient") and not (
+            token and request.headers.get("X-Admin-Token") == token):
+        raise HTTPException(403, "公开部署下重置学习数据需要管理令牌（X-Admin-Token）")
     opponents.reset_all()
     return {"reset": True}
 

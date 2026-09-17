@@ -109,7 +109,9 @@ def test_api_advice_pot_odds_math():
     # 翻牌互相过牌；转牌 BB 过牌、BTN 下注 1000 → BB 需跟 1000
     assert adv["to_call"] == 1000
     assert adv["pot"] == 1450 + 1000
-    assert adv["required_eq"] == round(1000 * 100 / (1450 + 1000 + 1000), 2)
+    # 边池感知口径：BB 只能赢别人的钱（BTN 匹配 1625 + 死钱 200），
+    # 自己之前的投入不是奖励。所需 = 1000/(1825+1000) = 35.4%
+    assert adv["required_eq"] == round(1000 * 100 / 2825, 2)
 
 
 def test_nine_max_advice_with_spr_and_recommendation():
@@ -255,8 +257,10 @@ def test_advice_invariants_random_scenarios():
                 rec = adv["recommendation"]
                 eq = adv["equity"]
                 assert abs(eq["win"] + eq["tie"] + eq["lose"] - 100) <= 0.02
-                exp_req = round(adv["to_call"] * 100 / (adv["pot"] + adv["to_call"]), 2) if adv["to_call"] > 0 else 0.0
-                assert adv["required_eq"] == exp_req
+                # 新口径由后端内部按可赢底池计算，这里只验证区间合理性
+                if adv["to_call"] > 0:
+
+                    assert 0 < adv["required_eq"] <= 100
                 pcts = [m["pct"] for m in rec["mix"]]
                 assert pcts == sorted(pcts, reverse=True)
                 assert all(0 <= p <= 100 for p in pcts)

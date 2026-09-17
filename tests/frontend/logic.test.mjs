@@ -49,3 +49,23 @@ test("行动阶段与手牌结束 → 操作台", () => {
   assert.equal(nextZone({ heroCards: ["As", "Ks"], gridMode: null,
                           view: { hand_over: true, actor: null } }), "console");
 });
+
+// 10：失败回滚规则——只有"校验失败"(400) 才允许撤销已录操作；
+// 服务/网络故障（5xx 等）必须保留历史，否则连删三部合法动作。
+import "../../frontend/logic.js";
+const { shouldRollbackOn, sameHand } = globalThis.AppLogic;
+
+test("只有 400 触发撤销自愈，5xx/网络失败保留历史", () => {
+  assert.equal(shouldRollbackOn(400), true);
+  assert.equal(shouldRollbackOn(503), false);
+  assert.equal(shouldRollbackOn(500), false);
+  assert.equal(shouldRollbackOn(undefined), false);
+});
+
+// 09：建议响应归属校验——请求发出后牌局变了（撤销/重开/继续操作），旧响应必须丢弃
+test("sameHand 判定响应是否仍属于当前牌局", () => {
+  assert.equal(sameHand(null, { opsLen: 0 }), false);
+  assert.equal(sameHand({ opsLen: 3, handKey: "AsKs|BTN" }, { opsLen: 3, handKey: "AsKs|BTN" }), true);
+  assert.equal(sameHand({ opsLen: 3, handKey: "AsKs|BTN" }, { opsLen: 4, handKey: "AsKs|BTN" }), false);
+  assert.equal(sameHand({ opsLen: 3, handKey: "AsKs|BTN" }, { opsLen: 3, handKey: "QdQc|BTN" }), false);
+});

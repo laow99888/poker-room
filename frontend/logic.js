@@ -26,5 +26,31 @@
     return "console";
   }
 
-  globalThis.AppLogic = { heroPickAllowed, nextZone };
+  /**
+   * 10：view 请求失败时是否允许"撤销最后一步"自愈。
+   * 只有 400（该步操作非法）才回滚；服务/网络故障保留全部历史。
+   */
+  function shouldRollbackOn(status) {
+    return status === 400;
+  }
+
+  /**
+   * 09：建议响应是否仍属于当前牌局。请求发出后只要操作数或
+   * 牌局键（底牌+座位）变了，旧响应就必须丢弃，不得覆盖当前建议。
+   */
+  function sameHand(before, after) {
+    if (!before || !after) return false;
+    return before.opsLen === after.opsLen && before.handKey === after.handKey;
+  }
+
+  /**
+   * 09：牌局键——同一手牌内不变；重开/换桌型/换座位后变化。
+   * 用于校验异步响应的归属。
+   */
+  function handKey(state) {
+    return (state.heroCards || []).map((c) => c || "_").join("") +
+      "|" + (state.heroPos || "") + "|" + (state.ops ? state.ops.length : 0);
+  }
+
+  globalThis.AppLogic = { heroPickAllowed, nextZone, shouldRollbackOn, sameHand, handKey };
 })();
