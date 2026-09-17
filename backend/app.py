@@ -191,16 +191,12 @@ def stats_get_api(name: str, request: Request):
 
 @app.post("/api/stats/reset")
 def stats_reset_api(request: Request):
-    """27：清空范围由部署模式决定，不依赖 client host 判断——
-    Nginx 反代下所有请求的来源地址都是 127.0.0.1，按地址放行等于向
-    公网开放全清。
-    - 未配置 POKER_ADMIN_TOKEN：本地单人模式，重置=全清（兼容原行为）；
-    - 已配置：公开多人模式，重置只清当前用户自己的数据；
-      持 X-Admin-Token 才能全清（所有用户+人群池）。
-    公开部署必须设置 POKER_ADMIN_TOKEN。
-    """
+    """38：保守默认——reset 只清当前用户自己的数据；"全清"（所有用户+
+    人群池）必须持 POKER_ADMIN_TOKEN。本地单人未配置令牌时，清自己的
+    （local 命名空间）在效果上等同全清自己的档案；人群池作为聚合数据
+    保留。公开部署不配置令牌也不再向任何人开放全局清空。"""
     token = os.environ.get("POKER_ADMIN_TOKEN", "")
-    if not token or request.headers.get("X-Admin-Token") == token:
+    if token and request.headers.get("X-Admin-Token") == token:
         opponents.reset_all()
         return {"reset": "all"}
     opponents.reset_user(_player_id(request))

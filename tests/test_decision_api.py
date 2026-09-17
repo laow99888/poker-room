@@ -397,3 +397,138 @@ def test_invalid_names_and_payouts_are_4xx():
         "sb": 100, "bb": 200, "payouts": ["NaN", 300]},
         "hero_pos": "BTN", "hero_cards": ["As", "Ad"], "ops": []})
     assert r4.status_code == 422
+
+
+def test_stats_reset_default_is_self_only():
+    """38：reset 的保守默认——不带管理令牌时永远只清自己
+    （无论部署是否配置了 POKER_ADMIN_TOKEN）；全清必须持令牌。"""
+    import os
+    from backend import opponents as opp
+    cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6}
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"}]
+    payload = {"config": cfg, "hero_pos": "BB", "hero_cards": ["As", "Ad"],
+               "ops": ops, "names": {"BB": "老张"}}
+    old_token = os.environ.pop("POKER_ADMIN_TOKEN", None)
+    try:
+        # 未配置令牌：远程客户端也只能清自己
+        client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
+        r = client.post("/api/stats/reset", headers={"X-Player-Id": "u-a"})
+        assert r.json() == {"reset": "user"}, r.json()
+        assert client.get("/api/stats/summary/all",
+                     headers={"X-Player-Id": "u-a"}).json()["named"] == {}
+        # 配置令牌：无令牌仍是自清
+        os.environ["POKER_ADMIN_TOKEN"] = "tok-1"
+        client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
+        assert client.post("/api/stats/reset",
+                      headers={"X-Player-Id": "u-a"}).json() == {"reset": "user"}
+        assert client.get("/api/stats/summary/all",
+                     headers={"X-Player-Id": "u-a"}).json()["named"] == {}
+        # 错误令牌 ≠ 全清
+        client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
+        r = client.post("/api/stats/reset",
+                   headers={"X-Player-Id": "u-a", "X-Admin-Token": "wrong"})
+        assert r.json() == {"reset": "user"}
+        assert client.get("/api/stats/summary/all",
+                     headers={"X-Player-Id": "u-a"}).json()["named"] == {}
+        # 正确令牌 → 全清
+        r = client.post("/api/stats/reset",
+                   headers={"X-Player-Id": "u-a", "X-Admin-Token": "tok-1"})
+        assert r.json() == {"reset": "all"}
+    finally:
+        if old_token is not None:
+            os.environ["POKER_ADMIN_TOKEN"] = old_token
+
+
+def test_cfr_raise_label_is_street_amount():
+    """33：CFR 加注展示必须是本街金额且夹在引擎上下限内，
+    不能把全手累计投入当成本街加注到。"""
+    cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6,
+           "stacks": [10000, 10000, 10000, 10000, 1000, 10000]}
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "call", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"},
+           {"op": "action", "type": "check", "seat": "BB"},
+           {"op": "board", "cards": ["2c", "3d", "7h"]},
+           {"op": "action", "type": "check", "seat": "BB"},
+           {"op": "action", "type": "check", "seat": "BTN"},
+           {"op": "board", "cards": ["9c"]},
+           {"op": "action", "type": "check", "seat": "BB"},
+           {"op": "action", "type": "check", "seat": "BTN"},
+           {"op": "board", "cards": ["Td"]},
+           {"op": "action", "type": "raise", "to": 200, "seat": "BB"}]
+    r = client.post("/api/hand/advice", json={"config": cfg, "hero_pos": "BTN",
+                    "hero_cards": ["As", "Ad"], "ops": ops, "iterations": 20000})
+    assert r.status_code == 200
+    adv = r.json()["advice"]
+    lo, hi = adv["min_raise_to"], adv["max_raise_to"]
+    assert lo is not None and hi is not None
+    for m in adv["cfr"]["mix"]:
+        if m["action"] == "raise" and "加注到" in m["label"]:
+            amt = float(m["label"].replace("加注到 ", "").replace(" BB", "")) * 200
+            assert lo - 1e-6 <= amt <= hi + 1e-6, (m["label"], lo, hi)
+
+
+def test_short_stack_required_eq_uses_contestable_layers():
+    """34：短码全下——引擎报 to_call=1000、总池 21300，但英雄只能争
+    3300 的可匹配层：门槛 30.30%，而不是 1000/21300=4.69%。"""
+    cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6,
+           "stacks": [10000, 10000, 10000, 10000, 1000, 10000]}
+    ops = [{"op": "action", "type": "allin", "seat": "UTG"},
+           {"op": "action", "type": "call", "seat": "HJ"}]
+    r = client.post("/api/hand/advice", json={"config": cfg, "hero_pos": "CO",
+                    "hero_cards": ["Ks", "Kh"], "ops": ops, "iterations": 20000})
+    assert r.status_code == 200
+    adv = r.json()["advice"]
+    assert adv["required_eq"] == 30.3, adv["required_eq"]
+    total = sum(l["amount"] for l in adv["side_pots"])
+    assert total == 3300
+    assert abs(adv["to_call"] * 100 / total - 30.303) < 0.01
+
+
+def test_side_pot_ev_drives_recommendation():
+    """35：主建议必须与分层 EV 对账——总体权益为 0、主池必输但边池必胜
+    （EV=+3000）时，不得以 fold 为主。用分层权益替身做确定性验收。"""
+    from unittest.mock import patch
+    cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6,
+           "stacks": [10000, 10000, 1000, 10000, 10000, 10000]}
+    ops = [{"op": "action", "type": "allin", "seat": "UTG"},
+           {"op": "action", "type": "call", "seat": "HJ"},
+           {"op": "action", "type": "raise", "to": 2000, "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"},
+           {"op": "action", "type": "fold", "seat": "BB"},
+           {"op": "action", "type": "call", "seat": "HJ"},
+           {"op": "board", "cards": ["2c", "3d", "7h"]},
+           {"op": "action", "type": "check", "seat": "HJ"},
+           {"op": "action", "type": "check", "seat": "CO"},
+           {"op": "board", "cards": ["9c"]},
+           {"op": "action", "type": "check", "seat": "HJ"},
+           {"op": "action", "type": "check", "seat": "CO"},
+           {"op": "board", "cards": ["Td"]},
+           {"op": "action", "type": "raise", "to": 1000, "seat": "HJ"}]
+    payload = {"config": cfg, "hero_pos": "CO", "hero_cards": ["Ks", "Kh"],
+               "ops": ops, "iterations": 20000}
+    # 权益替身：对两个对手（总体）为 0%；单挑 HJ 的边池层为 100%。
+    # 期望：主池 3300×0% + 边池 4000×100% - 1000 = +3000，建议以进攻为主。
+    def fake_simulate(hero, villains, board, iterations, seed=None):
+        base = {"win": 0.0, "tie": 0.0, "lose": 100.0, "equity": 0.0,
+                "exact": True, "iterations": iterations, "engine": "mock"}
+        if len(villains) == 1:
+            return {**base, "equity": 100.0, "win": 100.0, "lose": 0.0}
+        return base
+
+    with patch("backend.decision.equity.simulate", side_effect=fake_simulate):
+        r = client.post("/api/hand/advice", json=payload)
+    assert r.status_code == 200
+    adv = r.json()["advice"]
+    assert adv["ev_call"] == 3000.0, adv["ev_call"]
+    actions = {m["action"]: m["pct"] for m in adv["recommendation"]["mix"]}
+    aggressive = sum(p for a, p in actions.items() if a != "fold")
+    fold = actions.get("fold", 0)
+    assert aggressive > fold, (actions, adv["ev_call"])

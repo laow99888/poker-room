@@ -36,13 +36,19 @@ def _load() -> dict:
 
 
 def _migrate(data: dict) -> dict:
-    """旧版（named 平铺在顶层、_seen 平铺）迁移到 users 命名空间（27）。"""
+    """旧版（named 平铺在顶层、_seen 平铺）迁移到 users 命名空间（27/39）。
+
+    迁移必须幂等且消费旧键：顶层 legacy 与 _seen 在并入 users 后删除，
+    并以 schema=2 标记完成——否则 reset_user 删除 users.local 后，下次
+    读取又从残留的顶层键"复活"旧档案。
+    """
     if not isinstance(data, dict):
-        return {"users": {}}
-    if "users" not in data:
-        data["users"] = {}
+        return {"users": {}, "schema": 2}
+    if data.get("schema") == 2 and isinstance(data.get("users"), dict):
+        return data
+    data.setdefault("users", {})
     legacy = {k: v for k, v in data.items()
-              if k not in ("users", "_pool", "_pool_pos")
+              if k not in ("users", "_pool", "_pool_pos", "schema")
               and not k.startswith("_") and isinstance(v, dict)}
     if legacy or "_seen" in data:
         local = data["users"].setdefault("local", {"named": {}, "_hand_ids": []})
@@ -51,6 +57,9 @@ def _migrate(data: dict) -> dict:
         if isinstance(seen, list):
             ids = local.setdefault("_hand_ids", [])
             ids.extend(s for s in seen if isinstance(s, str))
+    for k in legacy:
+        data.pop(k)
+    data["schema"] = 2
     return data
 
 

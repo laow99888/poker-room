@@ -78,6 +78,20 @@ def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos
             return {"supported": False, "reason": "未找到对应决策点"}
 
         sk = res["skeleton"]
+        # 33：骨架金额是"全手累计投入"口径；界面与引擎（min/max_raise_to）
+        # 都按"本街加注到"计。展示前必须转换并夹在引擎合法上下限内，
+        # 不能把累计数直接当本街金额输出。
+        hero_bets_bb = state.bets[hero_index] / bb          # 本街已投入
+        prev_street_bb = s0 - hero_bets_bb                  # 前街累计（含前注死钱）
+        lo_to = state.min_completion_betting_or_raising_to_amount
+        hi_to = state.max_completion_betting_or_raising_to_amount
+
+        def to_street_amount(cumulative_bb: float) -> float:
+            amt = cumulative_bb - prev_street_bb
+            if lo_to is not None and hi_to is not None:
+                amt = min(max(amt, lo_to / bb), hi_to / bb)
+            return amt
+
         mix = []
         for label, child in zip(sk["labels"], sk["children"]):
             p = strat.get(label, 0.0)
@@ -96,7 +110,10 @@ def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos
                 entry["label"] = ("全下" if child.get("allin")
                                   else f"下注 {round(add, 1)} BB")
             elif label == "raise":
-                entry["label"] = f"加注到 {round(child.get('raise_to', 0.0), 1)} BB"
+                amt = to_street_amount(child.get("raise_to", 0.0))
+                allin = hi_to is not None and amt >= hi_to / bb - 1e-9
+                entry["label"] = ("全下" if allin
+                                  else f"加注到 {round(amt, 1)} BB")
             mix.append(entry)
         # 多个下注尺度因筹码不足聚成同一种"全下"时合并展示
         merged = []
@@ -310,10 +327,12 @@ def _mix_no_bet(eff, spr, opponent_count):
 
 
 def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponent_count,
-                          range_adv_val=None):
+                          range_adv_val=None, eff_override=None):
     """把权益与底池赔率翻译成带概率的行动建议。"""
-    # 24：用含平局半分的真实份额，不用 win+tie/2 —— 多家平分时它会高估
-    eff = eq.get("equity", eq["win"] + eq["tie"] / 2)
+    # 24/35：优先消费分层加权权益（与 EV 同源），平局半分的高估只在
+    # 无分层结果时兜底；多家平分时它会失真
+    eff = eff_override if eff_override is not None \
+        else eq.get("equity", eq["win"] + eq["tie"] / 2)
     eff_stack = state.get_effective_stack(hero_index)
     spr = round(eff_stack / pot, 1) if pot > 0 else None
     bb = state.blinds_or_straddles[1]
@@ -431,16 +450,19 @@ def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponen
 
 
 def _side_pots(state, hero_index: int, to_call: int):
-    """把"英雄跟注后可争夺的池"按投入层级分解（24）。
+    """把"英雄跟注后可争夺的池"按投入层级分解（24/34）。
 
-    返回 (layers, hero_total)：每层为 dict(amount=该层总额（含英雄与死钱
-    的切片）, seats=能与英雄争夺该层的对手座位)。对手投入超过英雄跟注后
-    总投入的部分在英雄够不到的更深层，不计入。弃牌死钱落在最浅层。
+    返回 (layers, hero_total, to_call_eff)。to_call_eff 是不足额跟注
+    封顶到英雄身后筹码后的实际跟注额——短码全下时引擎报出的 to_call
+    可能远超英雄能投的钱，赔率必须按实际投入算。每层 amount 含英雄
+    与死钱的切片；对手投入超过英雄总投入的部分在英雄够不到的更深层，
+    不计入（可争池口径）。弃牌死钱落在最浅层。
     """
     start = state.starting_stacks
     n = state.player_count
     contrib = [max(0, start[i] - state.stacks[i]) for i in range(n)]
-    hero_total = contrib[hero_index] + to_call
+    to_call_eff = min(to_call, state.stacks[hero_index])
+    hero_total = contrib[hero_index] + to_call_eff
     levels = sorted({min(contrib[i], hero_total) for i in range(n)
                      if i != hero_index and contrib[i] > 0})
     layers = []
@@ -455,7 +477,7 @@ def _side_pots(state, hero_index: int, to_call: int):
                  if i != hero_index and contrib[i] >= lv]
         layers.append({"amount": amount, "seats": seats})
         prev = lv
-    return layers, hero_total
+    return layers, hero_total, to_call_eff
 
 
 def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
@@ -523,14 +545,16 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
 
     to_call = state.checking_or_calling_amount
     pot = state.total_pot_amount
-    # 24：赔率与 EV 一律用"跟注相对弃牌"的增量口径——弃牌时自己在池里的
-    # 钱是放弃争夺的代价，不能从可赢池里扣掉（补盲 100/400 门槛是 25%，
-    # 不是 33.33%）。多层池时逐层用该层对手集合估算权益再分配收益，
-    # 避免"总体权益 0% 但边池必胜"的方向性错误。
-    layers, hero_total = _side_pots(state, hero_index, to_call)
-    required = round(to_call * 100 / (pot + to_call), 2) if to_call > 0 else 0.0
+    # 24/34：赔率、EV 与建议判定建立在同一份分层计算上。
+    # required = 实际跟注额 / 跟注后可争夺总额——补盲（100/400=25%）、
+    # 普通池（1000/3450=28.99%）与短码全下（1000/3300=30.30%）同时成立，
+    # 英雄够不到的深层边池不再压低门槛。
+    layers, hero_total, to_call_eff = _side_pots(state, hero_index, to_call)
+    total_amounts = sum(l["amount"] for l in layers)
+    required = (round(to_call_eff * 100 / total_amounts, 2)
+                if to_call_eff > 0 and total_amounts > 0 else 0.0)
     eff = eq.get("equity", eq["win"] + eq["tie"] / 2)
-    ev_call = -float(to_call)
+    ev_call = -float(to_call_eff)
     pot_rows = []
     for layer in layers:
         layer_villains = [villains[k] for k, seat in enumerate(villain_seats)
@@ -549,6 +573,10 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
                          "equity": layer_eq})
     ev_call = round(ev_call, 2)
     equity_share = round(eff, 2)
+    # 35：建议判定消费分层加权权益（Σ 权益×层金额 / Σ 层金额），
+    # 与 ev_call 同源对账——总体权益 0% 不再覆盖必胜边池
+    weighted_eff = (round(100.0 * (ev_call + to_call_eff) / total_amounts, 2)
+                    if total_amounts > 0 else eff)
 
     bb = state.blinds_or_straddles[1]
     ante = state.antes[0]
@@ -573,7 +601,8 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
 
     recommendation = _build_recommendation(
         state, hero_index, eq, to_call, pot, required, len(opponents),
-        range_adv_val=(range_adv["adv"] if range_adv else None))
+        range_adv_val=(range_adv["adv"] if range_adv else None),
+        eff_override=weighted_eff)
 
     cfr_block = _cfr_street_block(state, hero_index, hero_cards, hero_combos,
                                  villain_merged, board, recommendation)

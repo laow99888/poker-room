@@ -56,6 +56,7 @@ const state = {
   heroCards: [null, null],
   ops: [],
   handId: AppLogic.newHandId(),   // 14/29：初始化即有 ID，首手也能幂等去重
+  revision: 0,           // 36：单调版本号——任何状态变更递增，异步写回前校验
   unconfirmed: false,    // 26：刚提交、服务端尚未确认的最后一跳操作
   view: null,
   advice: null,
@@ -380,7 +381,7 @@ function renderAdvice() {
     <table class="adv-table">
       <tr><td>需跟注</td><td>${a.to_call > 0 ? bb(a.to_call) + " BB" : "0（可过牌）"}</td></tr>
       <tr><td>跟注所需胜率</td><td>${a.required_eq}%</td></tr>
-      <tr><td>你的权益</td><td>${(a.equity_share ?? eq.win + eq.tie / 2).toFixed(1)}%（含平局半分）</td></tr>
+      <tr><td>你的权益</td><td>${(a.equity_share ?? eq.win + eq.tie / 2).toFixed(1)}%（可争夺份额）</td></tr>
       <tr><td>跟注 EV</td><td class="${a.ev_call >= 0 ? "pos" : "neg"}">${a.ev_call >= 0 ? "+" : ""}${bb(a.ev_call)} BB</td></tr>
       <tr><td>SPR</td><td>${rec.spr ?? "—"}${rec.spr_note ? " · " + rec.spr_note : ""}</td></tr>
       <tr><td>M 值</td><td>${(a.m_value !== null && a.m_value !== undefined) ? a.m_value : "—"}</td></tr>
@@ -448,6 +449,7 @@ function pushOp(op) {
   }
   if (op.op === "board" && state.view && state.view.actor) return;
   state.error = null;
+  state.revision += 1;       // 36：动作变更递增版本，等长分支也能区分先后
   state.ops.push(op);
   state.unconfirmed = true;  // 26：这一跳刚提交、尚未被服务端确认
   state.busy = true;         // 点击即刻禁用操作按钮，不等网络返回（防连点）
@@ -471,7 +473,8 @@ async function refreshCore(retries = 0) {
   // 25：代次守卫——请求发出后只要重开/换了手牌（handId 变化），
   // 本次响应无论成败都不得写入状态，也不得触动 busy/pending
   const hid = state.handId;
-  const stale = () => state.handId !== hid;
+  const rev = state.revision;   // 36：动作/撤销/配置变化都会推进版本
+  const stale = () => state.handId !== hid || state.revision !== rev;
   try {
     const r = await fetch("/api/hand/view", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -479,6 +482,7 @@ async function refreshCore(retries = 0) {
     });
     if (stale()) return;
     const data = await r.json();
+    if (stale()) return;   // 36：响应体读取完成后再检——等待正文期间重开/换位也作废
     if (!r.ok) {
       // 26：只回滚"刚提交、未被确认"的最后一步（400 也可能源于配置或
       // 更早的步骤，绝不允许猜测性连环删除合法历史）
@@ -510,29 +514,35 @@ async function refreshCore(retries = 0) {
         headers: { "Content-Type": "application/json", ...statsHeaders() },
         body: JSON.stringify(payload()),
       }).then((rr) => {
+        if (state.handId !== hid) return;   // 40：旧手的任何结果不写入新一手
         if (!rr.ok) {
           showError("学习数据记录失败（服务未确认），本手可能未计入统计");
           return;
         }
+        state.recorded = true;
+        refreshLearn();
+      }).catch(() => {
         if (state.handId === hid) {
-          state.recorded = true;
-          refreshLearn();
+          showError("学习数据记录失败（网络异常），本手可能未计入统计");
         }
-      }).catch(() => showError("学习数据记录失败（网络异常），本手可能未计入统计"));
+      });
     }
     renderAll();
     if (data.actor === state.heroPos && !data.hand_over) {
-      const snap = AppLogic.handKey(state);
+      const snapRev = state.revision;
       const r2 = await fetch("/api/hand/advice", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...statsHeaders() },
         body: JSON.stringify(payload()),
       });
-      // 09/25：等待期间牌局变了（撤销/重开/又走了一步），旧响应必须丢弃；
-      // handKey 相同但 handId 不同的两手（同牌同座位同步数）也靠代次区分
-      if (r2.ok && !stale()
-          && AppLogic.sameHand(snap, AppLogic.handKey(state))) {
-        state.advice = (await r2.json()).advice;
-        renderAdvice();
+      // 09/25/36：等长动作分支（撤销再改一步）revision 也不同；读取响应
+      // 体前后各检一次，旧正文不得写回
+      if (r2.ok && !stale() && state.revision === snapRev) {
+        const advice = await r2.json();
+        if (!stale() && state.revision === snapRev) {
+          state.advice = advice.advice;
+          renderAdvice();
+        }
       }
     }
   } catch (_) {
@@ -563,6 +573,8 @@ document.addEventListener("click", (ev) => {
         if (!state.boardPicks.includes(card)) state.boardPicks.push(card);
         const need = STREET_DEAL[state.view.street];
         if (state.boardPicks.length >= need) {
+          state.revision += 1;   // 36：公共牌提交与动作同一版本纪律
+          state.unconfirmed = true;
           state.ops.push({ op: "board", cards: state.boardPicks.slice(0, need) });
           state.boardPicks = [];
           state.gridMode = null;
@@ -574,6 +586,7 @@ document.addEventListener("click", (ev) => {
         }
       } else if (AppLogic.heroPickAllowed(state)) {
         const idx = state.heroCards.findIndex((c) => !c);
+        state.revision += 1;
         state.heroCards[idx] = card;
         refresh();   // 仅在底牌未选齐时生效；选满后点牌库一律忽略，防误触重开
       }
@@ -621,7 +634,7 @@ document.addEventListener("click", (ev) => {
           .then(() => refreshLearn());
       }
       return;
-    case "undo": state.ops.pop(); state.unconfirmed = false; state.pending = null; state.gridMode = null; state.boardPicks = []; renderGrid(); renderBoard(); updateDeckTip(); refresh(); return;
+    case "undo": state.revision += 1; state.ops.pop(); state.unconfirmed = false; state.pending = null; state.gridMode = null; state.boardPicks = []; renderGrid(); renderBoard(); updateDeckTip(); refresh(); return;
     case "retry": state.error = null; refresh(); return;   // 26：同快照重试
     case "reset":
       resetHandState();
@@ -726,6 +739,7 @@ function resetHandState({ keepCards = false } = {}) {
   if (!keepCards) state.heroCards = [null, null];
   state.handId = AppLogic.newHandId();   // 14：每手新手牌一个新 id
   state.unconfirmed = false;             // 26：旧手的待确认标记随之作废
+  state.revision += 1;                   // 36：重开也是状态变更，作废旧响应
   state.view = null; state.advice = null; state.pending = null;
   state.error = null; state.gridMode = null; state.boardPicks = [];
   state.recorded = false;

@@ -148,12 +148,13 @@ def test_user_namespaces_isolate_profiles(stats_file):
            {"op": "action", "type": "fold", "seat": "SB"}]
     state, _, _ = replay_state(cfg, "BTN", ["As", "Ad"], ops)
     intel = player_intel(state)
+    pool_before = opponents.get_pool("BTN")   # 41：共享池快照，重置后必须不变
     opponents.record_hand(cfg, ops, {"BTN": "老王"}, intel, uid="user-A")
     assert opponents.get_stats("老王", uid="user-A")["hands"] == 1
     assert opponents.get_stats("老王", uid="user-B")["hands"] == 0
     opponents.reset_user("user-A")
     assert opponents.get_stats("老王", uid="user-A")["hands"] == 0
-    assert opponents.get_pool("BTN") is None or True   # 人群池不受 user reset 影响
+    assert opponents.get_pool("BTN") == pool_before   # 共享池不受 user reset 影响
 
 
 def test_hand_id_window_survives_stats_volume(stats_file):
@@ -187,3 +188,17 @@ def test_reserved_name_prefix_falls_back_to_pool(stats_file):
     assert r["recorded"] is True
     data = opponents._load()
     assert "_pool" not in data["users"]["local"]["named"]
+
+
+def test_migration_consumes_legacy_keys_no_revival(stats_file):
+    """39：旧顶层档案迁移进 users.local 后必须删除旧键——否则
+    reset_user 清掉 local 后，下次读取又从顶层残留"复活"旧档案。"""
+    stats_file.write_text('{"alice": {"hands": 7, "vpip": 2, "pfr": 1, "threebet": 0}}',
+                          encoding="utf-8")
+    # 迁移幂等：连续两次读取结构一致
+    d1 = opponents._load()
+    assert d1["schema"] == 2
+    assert "alice" not in d1                       # 顶层旧键已消费
+    assert opponents.get_stats("alice", uid="local")["hands"] == 7
+    opponents.reset_user("local")
+    assert opponents.get_stats("alice", uid="local")["hands"] == 0   # 不复活
