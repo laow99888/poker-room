@@ -40,16 +40,6 @@ class HandConfigIn(BaseModel):
     payouts: List[float] = []   # 决赛桌奖金结构（可选），如 [500, 300, 200]
 
 
-class HandIn(BaseModel):
-    config: HandConfigIn
-    hero_pos: str
-    hero_cards: List[str]
-    ops: List[dict] = []
-    iterations: int = 50_000
-    seed: Optional[int] = None
-    names: dict = {}        # 座位 → 对手代号（用于累计统计）
-
-
 def _dump(v) -> dict:
     return v.model_dump() if hasattr(v, "model_dump") else v.dict()
 
@@ -87,6 +77,7 @@ class HandIn(BaseModel):
     iterations: int = 50_000
     seed: Optional[int] = None
     names: dict = {}        # 座位 → 对手代号（用于累计统计）
+    hand_id: Optional[str] = None   # 前端生成的手牌唯一标识（14：记录幂等键）
 
 
 def _config_dump(config: HandConfigIn) -> dict:
@@ -103,24 +94,34 @@ def _replay_or_400(payload: HandIn):
 
 
 def _attach_icm(view: dict, config: HandConfigIn) -> None:
-    """配置了奖金结构时，把 ICM 奖金期望挂到视图上（解析失败静默跳过）。"""
+    """配置了奖金结构时，把 ICM 奖金期望挂到视图上（解析失败静默跳过）。
+
+    12：用手前筹码快照（config.stacks，缺省 50BB）而非下注后的剩余筹码——
+    在池的筹码仍在争夺中，全下者剩余为 0 也不代表出局。ICM 语义固定为
+    "这手牌开始时的记分牌值多少奖金"，因此也不会再出现 0 筹码报错。
+    """
     payouts = [float(p) for p in (config.payouts or [])]
     if not payouts or not any(p > 0 for p in payouts):
         return
-    if any(p < 0 for p in payouts) or len(payouts) > len(view["seats"]):
+    n = int(config.player_count)
+    if any(p < 0 for p in payouts) or len(payouts) > n:
         view["icm"] = {"error": "奖金结构无效：需为非负数，且名次数不超过人数"}
         return
+    stacks = ([int(x) for x in config.stacks] if config.stacks
+              else [config.bb * 50] * n)
     try:
-        eq = icm_equities([s["stack"] for s in view["seats"]], payouts)
+        eq = icm_equities(stacks, payouts)
     except ICMError as exc:
         view["icm"] = {"error": str(exc)}
         return
     pool = float(sum(payouts))
-    rows = [{"pos": s["pos"], "stack": s["stack"], "hero": s.get("is_hero", False),
+    rows = [{"pos": view["seats"][i]["pos"], "stack": stacks[i],
+             "hero": view["seats"][i].get("is_hero", False),
              "equity": round(eq[i], 1), "pct": round(eq[i] * 100 / pool, 1)}
-            for i, s in enumerate(view["seats"])]
+            for i in range(min(n, len(view["seats"])))]
     rows.sort(key=lambda r: -r["equity"])
-    view["icm"] = {"payouts": payouts, "total": pool, "rows": rows}
+    view["icm"] = {"payouts": payouts, "total": pool, "rows": rows,
+                   "snapshot": "hand-start"}
 
 
 @app.post("/api/hand/view")
@@ -154,13 +155,14 @@ def hand_advice_api(payload: HandIn):
 
 @app.post("/api/stats/record")
 def stats_record_api(payload: HandIn):
-    """手牌结束后调用：把本手计入对手档案（按签名去重，可安全重复提交）。"""
+    """手牌结束后调用：把本手计入对手档案（按 hand_id/签名去重，可安全重复提交）。"""
     state, hero_index, _ = _replay_or_400(payload)
     if state.status:
         raise HTTPException(400, "手牌尚未结束，无法记录")
     intel = decision.player_intel(state)
     result = opponents.record_hand(_config_dump(payload.config), payload.ops,
-                                   payload.names, intel, hero_index=hero_index)
+                                   payload.names, intel, hero_index=hero_index,
+                                   hand_id=payload.hand_id)
     return {"recorded": result}
 
 

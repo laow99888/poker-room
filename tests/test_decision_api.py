@@ -270,3 +270,41 @@ def test_advice_invariants_random_scenarios():
                 checked += 1
                 break
     assert checked >= 8   # 至少一半场景走到了英雄决策点
+
+
+def test_icm_uses_hand_start_stack_snapshot():
+    """12：ICM 按手前筹码快照——盲注/下注中的钱不算已定归属，
+    全下导致剩余 0 也不报错；语义 = 这手牌开始时的记分牌值多少奖金。"""
+    cfg = {"sb": 100, "bb": 200, "player_count": 6, "payouts": [600]}
+    payload = {"config": cfg, "hero_pos": "UTG",
+               "hero_cards": ["As", "Ad"], "ops": []}
+    v = client.post("/api/hand/view", json=payload).json()
+    icm = v["icm"]
+    assert "error" not in icm
+    assert icm["snapshot"] == "hand-start"
+    assert {r["stack"] for r in icm["rows"]} == {10000}   # 手前人人 10000
+    for r in icm["rows"]:
+        assert abs(r["equity"] - 100.0) < 0.05            # 冠军独得 → 各 100
+
+
+def test_icm_allin_player_not_an_error():
+    """12：有玩家全下（剩余 0）时 ICM 依旧按手前快照正常给出。"""
+    cfg = {"sb": 100, "bb": 200, "player_count": 6,
+           "stacks": [10000, 10000, 800, 10000, 10000, 10000],
+           "payouts": [300, 200, 100]}
+    ops = [{"op": "action", "type": "allin", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"},
+           {"op": "action", "type": "call", "seat": "BB"},
+           # 对手已全下：BB 无行动点，公共牌连发至摊牌
+           {"op": "board", "cards": ["Ah", "Kd", "2c"]},
+           {"op": "board", "cards": ["9h"]},
+           {"op": "board", "cards": ["3d"]}]
+    payload = {"config": cfg, "hero_pos": "BB",
+               "hero_cards": ["As", "Ad"], "ops": ops}
+    v = client.post("/api/hand/view", json=payload).json()
+    icm = v["icm"]
+    assert "error" not in icm
+    assert {r["stack"] for r in icm["rows"]} == {10000, 800}   # 手前快照原值

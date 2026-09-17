@@ -78,12 +78,6 @@ def _showdown_ev(eq: float, c0: float, c1: float) -> float:
     """
     ce = c0 if c0 < c1 else c1
     return eq * c1 - (1.0 - eq) * ce
-    ce = c0 if c0 < c1 else c1
-    if v > 0:
-        return c1
-    if v < 0:
-        return -ce
-    return (c1 - c0) / 2.0
 
 
 def _cfr(node, u: int, p0: float, p1: float, i: int, j: int, vmat, tables: dict, t: int) -> float:
@@ -276,15 +270,18 @@ def _stratified_subset(combos, opponent, board_t, limit: int):
     return [combos[i] for i in picks], strength, True
 
 
-def solve_river(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: float = 0.0,
+def solve_river(board, hero_combos, villain_combos, pot_bb: float = None,
+                to_call_bb: float = 0.0,
                 stack_bb: float = 10.0, bet_sizes=(1.0,), raise_size: float = 1.0,
                 buckets: int = 8, iterations: int = 1200,
-                range_cap: int = 120, keep=()) -> dict:
+                range_cap: int = 120, keep=(), money=None) -> dict:
     """河牌单街求解。英雄恒为座位 0（当前决策者），面额 BB。
 
     范围超过 range_cap 时按探测权益分层抽样；keep 中的组合必保留。
     固定迭代数（范围已封顶，单次迭代成本有界）→ 同参数结果完全可复现。
-    返回 dict：组合与桶号、桶对胜负矩阵、平均策略、骨架树等。
+    money=(s0, s1, dead, r0, r1) 显式给出金额口径（03：累计投入/死钱/
+    身后筹码分离）；缺省时按 (pot_bb, to_call_bb, stack_bb) 派生（兼容旧参数）。
+    返回 dict：组合与桶号、桶对权益矩阵（eq ∈ [0,1]）、平均策略、骨架树等。
     组合过少/冲突/依赖缺失时抛 CFRError。
     """
     if _TCard is None:
@@ -295,8 +292,8 @@ def solve_river(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: f
     villain_all = sorted({tuple(c) for c in villain_combos if not (set(c) & set(board))})
     if not hero_all or not villain_all:
         raise CFRError("过滤死牌后范围为空，无法求解")
-    if pot_bb <= 0 or to_call_bb < 0 or stack_bb <= 0:
-        raise CFRError("底池、跟注额与有效筹码必须为正")
+
+    s0, s1, dead, r0, r1, to_call = _resolve_money(pot_bb, to_call_bb, stack_bb, money)
 
     board_t = [_t(c) for c in board]
     keep_set = {frozenset(c) for c in keep}
@@ -322,13 +319,16 @@ def solve_river(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: f
                 continue
             hr = _EVAL.evaluate(board_t, [h0, h1])
             vr = _EVAL.evaluate(board_t, [_t(vc[0]), _t(vc[1])])
-            row[j] = 1 if hr < vr else (-1 if hr > vr else 0)
+            # 02：终值统一为权益域 eq ∈ [0,1]（含平局半分），而不是 ±1 符号——
+            # 桶平均后是混合桶的期望胜率，绝不能被当成"必胜/必败"
+            row[j] = 1.0 if hr < vr else (0.5 if hr == vr else 0.0)
 
     hero_bucket, nb_h, hero_strength = _bucket_assign(hero, vmat, buckets)
     vmat_t = [[vmat[i][j] for i in range(nh)] for j in range(nv)]
     villain_bucket, nb_v, villain_strength = _bucket_assign(villain, vmat_t, buckets)
 
-    # 桶对聚合：桶对 (A,B) 的摊牌值 = 桶内合法组合对的平均胜负，权重 = 合法对数
+    # 桶对聚合：桶对 (A,B) 的摊牌值 = 桶内合法组合对的平均权益（eq ∈ [0,1]），
+    # 权重 = 合法对数
     nb = max(nb_h, nb_v)
     bvmat = [[0.0] * nb_v for _ in range(nb_h)]
     cnt = [[0] * nb_v for _ in range(nb_h)]
@@ -352,12 +352,9 @@ def solve_river(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: f
     if not pairs:
         raise CFRError("英雄与对手范围完全冲突，无法求解")
 
-    base = max(0.0, (pot_bb - to_call_bb) / 2.0)
-    c0 = base
-    c1 = base + max(0.0, to_call_bb)
-    stack_bb = max(stack_bb, c0, c1)
-    skeleton = _skeleton(to_call_bb > 1e-9, c0, c1, stack_bb,
-                         tuple(bet_sizes), raise_size, max_raises=1)
+    skeleton = _skeleton(to_call > 1e-9, s0, s1, dead, r0, r1,
+                         tuple(bet_sizes), raise_size, max_raises=1,
+                         eq_terminal=True)
 
     # 固定迭代数：结果确定，耗时由 range_cap 与 iterations 共同封顶
     avg = solve_pairs(skeleton, pairs, bvmat, iterations=iterations)
@@ -398,64 +395,103 @@ def _bucket_assign(combos, vmat_rows, n_buckets, strengths=None):
     return bucket, n_buckets, strengths
 
 
-def _skeleton(facing: bool, c0: float, c1: float, stack: float,
-              bet_sizes, raise_size: float, max_raises: int = 1,
-              eq_terminal: bool = False):
+def _skeleton(facing, s0, s1, dead, r0, r1, bet_sizes, raise_size: float,
+              max_raises: int = 1, eq_terminal: bool = False):
     """单街行动骨架（与具体组合无关，逐桶对共享）。面额统一为 BB。
 
+    金额三路分离（03）：s0/s1 = 双方累计投入（含前街与死钱之外的所有
+    在池筹码），dead = 第三方死钱（多人池其他人的投入），r0/r1 = 双方
+    身后剩余筹码。底池 = s0 + s1 + dead。终值为座位 0 的手牌净收益：
+    赢家收下对手投入+死钱，输家沉没自己那份，弃牌沉没自己的累计投入。
+
     行动标签：check / bet / call / fold / raise（多个下注尺度时为 bet:P×f 等）。
-    eq_terminal=True 时摊牌节点终值为期望胜率 [0,1]（多街 rollout），否则 ±1 符号。
+    eq_terminal=True 时摊牌节点终值为期望胜率 [0,1]（多街 rollout / 河牌
+    桶平均），否则 ±1 符号。
+
+    已知边界：跟注按足额持平建模（不足额全下跟注的边池不在单街骨架内）。
     """
-    def build(actor, a, b, raises, hist, facing_):
+    dead = float(dead)
+
+    def build(actor, a, b, ra, rb, raises, hist, facing_):
+        pot = a + b + dead
         committed = a if actor == 0 else b
         opp_committed = b if actor == 0 else a
-        outstanding = opp_committed - committed
+        behind = ra if actor == 0 else rb
         labels, children = [], []
 
         def act_node():
             return {"kind": "action", "seat": actor, "hist": hist,
                     "labels": labels, "children": children}
 
+        def after_put(add):
+            """行动方再投入 add 后的新 (a, b, ra, rb)。"""
+            if actor == 0:
+                return a + add, b, ra - add, rb
+            return a, b + add, ra, rb - add
+
         if facing_:  # 面对下注/加注
             labels.append("fold")
-            # 弃牌净收益：座位 0 视角 = 对方已投入（自己那份沉没）
+            # 弃牌净收益：自己的累计投入全部沉没（座位 0 视角）
             children.append({"kind": "fold",
-                             "net0": b if actor == 1 else -a})
+                             "net0": (b + dead) if actor == 1 else -a})
             labels.append("call")
-            children.append({"kind": "showdown", "c0": opp_committed, "c1": opp_committed, **({"eq": True} if eq_terminal else {})})
+            # 跟注后双方累计持平；赢则收下对手投入+死钱，输则沉没自己那份
+            children.append({"kind": "showdown", "c0": opp_committed,
+                             "c1": opp_committed + dead,
+                             **({"eq": True} if eq_terminal else {})})
             if raises < max_raises:
-                extra = stack - committed
-                target = opp_committed + raise_size * (a + b)
-                target = min(target, committed + extra)
+                target = min(opp_committed + raise_size * pot,
+                             committed + behind)
                 if target > opp_committed:
-                    na, nb = (target, opp_committed) if actor == 0 else (opp_committed, target)
+                    na, nb, nra, nrb = after_put(target - committed)
                     labels.append("raise")
-                    child = build(1 - actor, na, nb, raises + 1, hist + "r", True)
-                    child["raise_to"] = target          # 加注到的总额（本街）
+                    child = build(1 - actor, na, nb, nra, nrb,
+                                  raises + 1, hist + "r", True)
+                    child["raise_to"] = target          # 加注到的累计投入
                     children.append(child)
             return act_node()
 
         labels.append("check")
         if hist.endswith("k"):  # 双方连续过牌 → 摊牌
-            children.append({"kind": "showdown", "c0": a, "c1": b, **({"eq": True} if eq_terminal else {})})
+            children.append({"kind": "showdown", "c0": a, "c1": a + dead,
+                             **({"eq": True} if eq_terminal else {})})
         else:
-            children.append(build(1 - actor, a, b, raises, hist + "k", False))
-        extra = stack - committed
-        if extra > 0 and raises < max_raises:
+            children.append(build(1 - actor, a, b, ra, rb, raises, hist + "k", False))
+        if behind > 1e-12 and raises < max_raises:
             for f in bet_sizes:
-                target = min(committed + f * (a + b), committed + extra)
-                if target <= committed:
-                    continue  # 筹码不足以按该尺度下注
-                na, nb = (target, opp_committed) if actor == 0 else (opp_committed, target)
+                target = min(committed + f * pot, committed + behind)
+                if target <= committed + 1e-12:
+                    continue  # 身后筹码不足以按该尺度下注
+                na, nb, nra, nrb = after_put(target - committed)
                 label = "bet" if len(bet_sizes) == 1 else f"bet:P×{f:g}"
                 labels.append(label)
-                child = build(1 - actor, na, nb, raises + 1, hist + "b", True)
+                child = build(1 - actor, na, nb, nra, nrb,
+                              raises + 1, hist + "b", True)
                 child["bet_add"] = target - committed   # 本街新增投入
-                child["allin"] = target >= committed + extra - 1e-9
+                child["allin"] = target >= committed + behind - 1e-9
                 children.append(child)
         return act_node()
 
-    return build(0, c0, c1, 0, "", facing)
+    return build(0, s0, s1, r0, r1, 0, "", facing)
+
+
+def _resolve_money(pot_bb, to_call_bb, stack_bb, money):
+    """统一金额口径（03）。显式 money=(s0, s1, dead, r0, r1) 优先；
+    否则按旧参数派生：把整池分解为双方累计投入、无死钱、身后 = stack-投入
+    （与历史行为逐位一致，老测试继续成立）。返回 (s0, s1, dead, r0, r1, 跟注额)。"""
+    if money is not None:
+        if len(money) != 5:
+            raise CFRError("money 需为 (s0, s1, dead, r0, r1) 五元组（BB 计）")
+        s0, s1, dead, r0, r1 = (float(x) for x in money)
+        if min(s0, s1, dead, r0, r1) < 0:
+            raise CFRError("money 各项（累计投入/死钱/身后筹码）不能为负")
+        return s0, s1, dead, r0, r1, s1 - s0
+    if pot_bb is None or pot_bb <= 0 or to_call_bb < 0 or stack_bb <= 0:
+        raise CFRError("底池、跟注额与有效筹码必须为正")
+    t = max(0.0, to_call_bb)
+    base = max(0.0, (pot_bb - t) / 2.0)
+    stack_bb = max(stack_bb, base, base + t)
+    return base, base + t, 0.0, stack_bb - base, stack_bb - base - t, t
 
 
 # ---------------------------------------------------------------------------
@@ -505,15 +541,17 @@ def _rollout_eq(hero_combo, villain_combo, board, samples, rand):
     return wins / samples
 
 
-def solve_street(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: float = 0.0,
+def solve_street(board, hero_combos, villain_combos, pot_bb: float = None,
+                 to_call_bb: float = 0.0,
                  stack_bb: float = 10.0, bet_sizes=(1.0,), raise_size: float = 1.0,
                  buckets: int = 8, iterations: int = 1200,
                  range_cap: int = 120, keep=(),
                  probe_runouts: int = 8, pair_runouts: int = 24,
-                 pair_samples: int = 10) -> dict:
+                 pair_samples: int = 10, money=None) -> dict:
     """单街求解总入口：河牌（5 张）直接走 solve_river 精确路径；
     翻牌（3 张）/转牌（4 张）把"剩余牌随机发完的期望胜率" rollout 成桶对终值。
 
+    money=(s0, s1, dead, r0, r1) 显式金额口径（03），缺省按旧参数派生。
     近似说明：rollout 把后续街的博弈权益压缩成一个静态期望值（不含未来街的行动
     价值），胜率本身由固定种子抽样估计——同参数结果逐位可复现，方向与教科书
     定理一致，但不是该街的精确纳什均衡。
@@ -525,11 +563,11 @@ def solve_street(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: 
                            to_call_bb=to_call_bb, stack_bb=stack_bb,
                            bet_sizes=tuple(bet_sizes), raise_size=raise_size,
                            buckets=buckets, iterations=iterations,
-                           range_cap=range_cap, keep=keep)
+                           range_cap=range_cap, keep=keep, money=money)
     if len(board) not in (3, 4):
         raise CFRError("多街求解只支持翻牌（3 张）或转牌（4 张）公共牌")
-    if pot_bb <= 0 or to_call_bb < 0 or stack_bb <= 0:
-        raise CFRError("底池、跟注额与有效筹码必须为正")
+
+    s0, s1, dead, r0, r1, to_call = _resolve_money(pot_bb, to_call_bb, stack_bb, money)
 
     hero_all = sorted({tuple(c) for c in hero_combos if not (set(c) & set(board))})
     villain_all = sorted({tuple(c) for c in villain_combos if not (set(c) & set(board))})
@@ -596,12 +634,9 @@ def solve_street(board, hero_combos, villain_combos, pot_bb: float, to_call_bb: 
     if not pairs:
         raise CFRError("英雄与对手范围完全冲突，无法求解")
 
-    base = max(0.0, (pot_bb - to_call_bb) / 2.0)
-    c0 = base
-    c1 = base + max(0.0, to_call_bb)
-    stack_bb = max(stack_bb, c0, c1)
-    skeleton = _skeleton(to_call_bb > 1e-9, c0, c1, stack_bb,
-                         tuple(bet_sizes), raise_size, max_raises=1, eq_terminal=True)
+    skeleton = _skeleton(to_call > 1e-9, s0, s1, dead, r0, r1,
+                         tuple(bet_sizes), raise_size, max_raises=1,
+                         eq_terminal=True)
 
     avg = solve_pairs(skeleton, pairs, bvmat, iterations=iterations)
     return {

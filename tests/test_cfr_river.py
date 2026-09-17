@@ -57,10 +57,10 @@ def test_bucketing_by_range_equity():
     res = solve_river(BOARD, hero, villain, pot_bb=1.0, iterations=300, buckets=2)
     idx_aa = res["hero_combos"].index(("Ac", "Ad"))
     idx_22 = res["hero_combos"].index(("2c", "2d"))
-    assert res["hero_strength"][idx_aa] == pytest.approx(1.0)   # AA 赢全部 KK
-    assert res["hero_strength"][idx_22] == pytest.approx(-1.0)  # 22 输全部 KK
+    assert res["hero_strength"][idx_aa] == pytest.approx(1.0)   # AA 赢全部 KK → eq=1
+    assert res["hero_strength"][idx_22] == pytest.approx(0.0)   # 22 输全部 KK → eq=0
     assert res["hero_bucket"][idx_aa] < res["hero_bucket"][idx_22]
-    assert res["villain_strength"][0] == pytest.approx(0.0)     # KK 打平整体
+    assert res["villain_strength"][0] == pytest.approx(0.5)     # KK 对 AA/22 各半 → eq=0.5
     assert res["pairs"] == 4  # 英雄 2 桶 × 对手 2 桶（等强组合均分），远小于 72 个原始组合对
 
 

@@ -136,5 +136,6 @@ if fails:
     print(f"失败 {len(fails)} 项:")
     for f_ in fails:
         print("  ✗", f_)
+    raise SystemExit(1)   # 19：失败必须以非零码退出，CI/脚本才能感知
 else:
     print("全部通过 ✓")

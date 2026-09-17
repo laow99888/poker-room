@@ -69,3 +69,21 @@ test("sameHand 判定响应是否仍属于当前牌局", () => {
   assert.equal(sameHand({ opsLen: 3, handKey: "AsKs|BTN" }, { opsLen: 4, handKey: "AsKs|BTN" }), false);
   assert.equal(sameHand({ opsLen: 3, handKey: "AsKs|BTN" }, { opsLen: 3, handKey: "QdQc|BTN" }), false);
 });
+
+// 14：每手新手牌唯一标识——内容相同的两手独立牌局靠它区分
+import "../../frontend/logic.js";
+const { newHandId, escapeHtml } = globalThis.AppLogic;
+
+test("newHandId 生成非空且互不相同的标识", () => {
+  const a = newHandId(), b = newHandId();
+  assert.ok(a && typeof a === "string");
+  assert.notEqual(a, b);
+});
+
+// 15：对手代号等用户自由输入必须转义后才能进 innerHTML
+test("escapeHtml 中和 HTML 特殊字符", () => {
+  assert.equal(escapeHtml('<img src=x onerror="alert(1)">'),
+               "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+  assert.equal(escapeHtml(`'&`), "&#39;&amp;");
+  assert.equal(escapeHtml("老张"), "老张");       // 普通名字不受影响
+});

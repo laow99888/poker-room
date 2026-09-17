@@ -93,3 +93,44 @@ def test_weighted_sampling_shifts_equity():
     vs_strong = simulate(hero, heavy_strong, [], iterations=8000, seed=5)
     # 对手范围 99% 偏弱牌时 hero 权益显著高于 99% 偏强牌时
     assert vs_weak["win"] - vs_strong["win"] > 30
+
+
+def test_hand_id_distinguishes_identical_hands(stats_file):
+    """14：内容完全相同的两手独立牌局靠 hand_id 区分；同一 hand_id 幂等。"""
+    cfg = {"player_count": 6, "sb": 100, "bb": 200, "ante": 0}
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"}]
+    state, _, _ = replay_state(cfg, "BTN", ["As", "Ad"], ops)
+    intel = player_intel(state)
+    r1 = opponents.record_hand(cfg, ops, {"BTN": "老王"}, intel, hand_id="h-1")
+    r2 = opponents.record_hand(cfg, ops, {"BTN": "老王"}, intel, hand_id="h-2")
+    r3 = opponents.record_hand(cfg, ops, {"BTN": "老王"}, intel, hand_id="h-2")
+    assert r1["recorded"] is True and r2["recorded"] is True
+    assert r3["recorded"] is False
+    assert opponents.get_stats("老王")["hands"] == 2
+
+
+def test_hand_id_via_api(stats_file):
+    """14：API 层 hand_id 透传到记录层（内容相同、id 不同都计入）。"""
+    from fastapi.testclient import TestClient
+    from backend.app import app
+    client = TestClient(app)
+    cfg = {"player_count": 6, "sb": 100, "bb": 200, "ante": 0}
+    ops = [{"op": "action", "type": "fold", "seat": "UTG"},
+           {"op": "action", "type": "fold", "seat": "HJ"},
+           {"op": "action", "type": "fold", "seat": "CO"},
+           {"op": "action", "type": "fold", "seat": "BTN"},
+           {"op": "action", "type": "fold", "seat": "SB"}]
+    payload = {"config": cfg, "hero_pos": "BTN",
+               "hero_cards": ["As", "Ad"], "ops": ops, "names": {"BTN": "阿强"}}
+    for hid in ("api-1", "api-2"):
+        payload["hand_id"] = hid
+        r = client.post("/api/stats/record", json=payload)
+        assert r.status_code == 200
+        assert r.json()["recorded"]["recorded"] is True
+    payload["hand_id"] = "api-2"
+    r = client.post("/api/stats/record", json=payload)
+    assert r.json()["recorded"]["recorded"] is False   # 同 id 幂等

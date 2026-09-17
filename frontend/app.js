@@ -55,6 +55,7 @@ const state = {
   heroPos: "BTN",
   heroCards: [null, null],
   ops: [],
+  handId: null,          // 14：本手唯一标识（随学习记录提交，服务端按它幂等）
   view: null,
   advice: null,
   gridMode: null,        // 'hero' | 'board'
@@ -409,6 +410,7 @@ function payload() {
     hero_pos: state.heroPos,
     hero_cards: state.heroCards,
     ops: state.ops,
+    hand_id: state.handId,
     iterations: ITERATIONS,
     names: Object.fromEntries(
       POSITIONS_BY_SIZE[state.config.player_count]
@@ -663,7 +665,7 @@ function renderNames() {
   const names = POSITIONS_BY_SIZE[state.config.player_count]
     .filter((p) => p !== state.heroPos);
   $("#names-grid").innerHTML = names.map((p) => {
-    const v = opponentName(p);
+    const v = AppLogic.escapeHtml(opponentName(p));
     return `<label class="stack-cell">${p}<input type="text" data-name-pos="${p}" value="${v}" placeholder="—" aria-label="${p} 对手代号"></label>`;
   }).join("");
 }
@@ -679,8 +681,8 @@ function renderIcm() {
     `<tr class="${r.hero ? "icm-hero" : ""}"><td>${r.pos}${r.hero ? "（你）" : ""}</td>` +
     `<td>${money(r.stack)}</td><td>${r.pct}%</td><td>${money(r.equity)}</td></tr>`).join("");
   el.innerHTML = `
-    <div class="icm-title">ICM 奖金期望 <span class="tip">（奖池 ${money(icm.total)} · Malmuth–Harville）</span></div>
-    <table class="icm-table"><thead><tr><th>座位</th><th>记分牌</th><th>份额</th><th>期望奖金</th></tr></thead>
+    <div class="icm-title">ICM 奖金期望 <span class="tip">（奖池 ${money(icm.total)} · Malmuth–Harville · 按手前记分牌快照）</span></div>
+    <table class="icm-table"><thead><tr><th>座位</th><th>手前记分牌</th><th>份额</th><th>期望奖金</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <p class="footnote">泡沫期中短筹码的边缘牌跟注价值低于记分牌 EV，淘汰风险要计入决策。</p>`;
 }
@@ -689,6 +691,7 @@ function resetHandState({ keepCards = false } = {}) {
   // 13：所有"重开一手"语义的唯一入口——集中清理，防止遗漏 recorded/选牌/挂起请求
   state.ops = [];
   if (!keepCards) state.heroCards = [null, null];
+  state.handId = AppLogic.newHandId();   // 14：每手新手牌一个新 id
   state.view = null; state.advice = null; state.pending = null;
   state.error = null; state.gridMode = null; state.boardPicks = [];
   state.recorded = false;

@@ -42,13 +42,19 @@ def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos
             return {"supported": False, "reason": "CFR 参考仅支持单挑底池"}
         if not hero_combos or not villain_combos:
             return {"supported": False, "reason": "范围信息不足，无法求解"}
+        # 03：金额口径三路分离——累计投入（含前街）/死钱/身后剩余筹码。
+        # stack_bb 不能再拿"身后剩余"去减"已在池的钱"（老代码重复扣减，
+        # 全下额度失真）。PokerKit 的 stack 是身后筹码，start-stack = 累计投入。
         bb = state.blinds_or_straddles[1]
         if bb <= 0:
             return {"supported": False, "reason": "盲注配置异常"}
-
+        opp = live[0]
         pot_bb = state.total_pot_amount / bb
         to_call_bb = state.checking_or_calling_amount / bb
-        stack_bb = min(state.stacks[hero_index], state.stacks[live[0]]) / bb
+        s0 = (state.starting_stacks[hero_index] - state.stacks[hero_index]) / bb
+        s1 = (state.starting_stacks[opp] - state.stacks[opp]) / bb
+        money = (s0, s1, max(0.0, pot_bb - s0 - s1),
+                 state.stacks[hero_index] / bb, state.stacks[opp] / bb)
         hero_range = list(hero_combos)
         actual = _norm_combo(hero_cards)
         actual_added = not any(frozenset(c) == frozenset(actual) for c in hero_range)
@@ -56,8 +62,7 @@ def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos
             hero_range.append(actual)
 
         res = cfr_mod.solve_street(board, hero_range, villain_combos,
-                                   pot_bb=pot_bb, to_call_bb=to_call_bb,
-                                   stack_bb=stack_bb, bet_sizes=(0.5, 1.0),
+                                   money=money, bet_sizes=(0.5, 1.0),
                                    buckets=8, iterations=1600, keep=[actual])
 
         idx = next(i for i, c in enumerate(res["hero_combos"])
@@ -104,7 +109,7 @@ def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos
         heur_top = recommendation["mix"][0]["action"] if recommendation["mix"] else None
         cfr_top = mix[0]["action"] if mix else None
         s_raw = res["hero_strength"][idx]
-        equity_pct = round((s_raw * 100) if len(board) < 5 else (s_raw + 1) / 2 * 100, 1)
+        equity_pct = round(s_raw * 100, 1)   # 河牌/翻牌/转牌统一 eq ∈ [0,1]
         return {
             "supported": True,
             "street": street,

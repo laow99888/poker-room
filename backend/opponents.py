@@ -41,21 +41,25 @@ def hand_signature(config: dict, ops: list) -> str:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def record_hand(config, ops, names: dict, intel: dict, hero_index=None) -> dict:
+def record_hand(config, ops, names: dict, intel: dict, hero_index=None,
+                hand_id=None) -> dict:
     """把一手已完成的牌局计入统计。
 
     intel: decision.player_intel(state) 的输出（每座位行为桶）。
     names: {座位名: 对手代号}；有代名的进个人档案，其余进人群位置池。
+    hand_id: 前端为每手牌生成的唯一标识（14）——内容完全相同的两手
+    独立牌局靠它区分；缺省回退到内容签名。同一 hand_id 幂等（不重复计）。
     返回 {"recorded": bool, "names": [...], "pool": True}。
     """
     with _LOCK:
-        return _record_hand_locked(config, ops, names, intel, hero_index)
+        return _record_hand_locked(config, ops, names, intel, hero_index, hand_id)
 
 
-def _record_hand_locked(config, ops, names, intel, hero_index) -> dict:
+def _record_hand_locked(config, ops, names, intel, hero_index, hand_id=None) -> dict:
     data = _load()
     seen = data.setdefault("_seen", [])
-    sig = hand_signature(config, ops)
+    # "id:" 前缀隔离命名空间，避免与内容签名（16 位 hex）碰撞
+    sig = ("id:" + str(hand_id)[:64]) if hand_id else hand_signature(config, ops)
     if sig in seen:
         return {"recorded": False, "reason": "重复"}
     seen.append(sig)

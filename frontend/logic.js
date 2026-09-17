@@ -52,5 +52,28 @@
       "|" + (state.heroPos || "") + "|" + (state.ops ? state.ops.length : 0);
   }
 
-  globalThis.AppLogic = { heroPickAllowed, nextZone, shouldRollbackOn, sameHand, handKey };
+  /**
+   * 14：为每手新手牌生成唯一标识，随学习记录提交——内容完全相同的
+   * 两手独立牌局靠它区分，服务端按它幂等去重。
+   */
+  function newHandId() {
+    if (globalThis.crypto && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return "h-" + Date.now().toString(36) + "-" +
+      Math.random().toString(36).slice(2, 10);
+  }
+
+  /**
+   * 15：HTML 转义。对手代号等用户自由输入一律先转义再进 innerHTML，
+   * 防止 <img onerror=…> 之类的注入。
+   */
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (ch) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+    ));
+  }
+
+  globalThis.AppLogic = { heroPickAllowed, nextZone, shouldRollbackOn, sameHand,
+                          handKey, newHandId, escapeHtml };
 })();
