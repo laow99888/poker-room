@@ -75,7 +75,9 @@ main#layout {
   }
 }
 @media (max-width: 820px) {
-  main#layout { grid-template-columns: 1fr; grid-template-areas: "setup" "table" "right"; }
+  main#layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "setup" "table" "right"; }
+  main#layout > .col, main#layout .panel { min-width: 0; }   /* 防止牌库网格最小宽(约420px)经内层 grid 撑出视口 */
+  #cfg-payouts { flex: 1 1 160px; width: auto; }   /* 窄屏下奖金输入占满整行，placeholder 不再被裁 */
 }
 
 .panel {
@@ -342,3 +344,25 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .mix-pct { text-align: right; font-family: var(--serif); color: var(--cream); }
 .rec-reason { font-size: 12px; color: var(--muted); margin: 7px 0 0; }
 .cfr-note { font-size: 12px; color: var(--muted); margin: 7px 0 0; }
+
+/* 手机：触控目标与座位收缩（实测 390px 视口校准）。置于文件末尾以覆盖上方同特异性规则。 */
+@media (max-width: 560px) {
+  .panel { padding: 14px 14px 16px; }
+  /* 牌库：13 列保持不动，允许横向滑动，格子与热区放大到可点 */
+  #board-grid, #card-grid {
+    grid-template-columns: repeat(13, minmax(26px, 1fr));
+    gap: 4px; overflow-x: auto; padding: 4px 2px 10px;
+  }
+  .grid-card { position: relative; }
+  .grid-card::after { content: ""; position: absolute; inset: -3px; }   /* 扩大点击热区 */
+  /* 牌桌：座位收进椭圆内 */
+  #table-oval { height: 430px; padding: 14px; }
+  #table-oval::after { inset: 52px 60px; }
+  .seat { min-width: 0; padding: 6px 8px; }
+  .seat::before { inset: -7px -9px; }
+  .pos-tag { font-size: 11px; }
+  .seat .stack { font-size: 14px; }
+  .mini-card { font-size: 11px; padding: 2px 4px; }
+  .bet-chip { font-size: 11px; padding: 2px 7px; }
+  #table-logo { font-size: 38px; }
+}
