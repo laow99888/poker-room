@@ -32,6 +32,13 @@ function esc(v) {
 }
 function fmtChips(n) { return Number(n).toLocaleString("zh-CN"); }
 function fmtNum(n) { return (Math.round((Number(n) || 0) * 10) / 10).toFixed(1); }
+function actionAmount(chips) {
+  return rt.unit === "bb" ? `${bbInputValue(chips)} BB / ${fmtChips(chips)} 筹码`
+    : `${fmtChips(chips)} 筹码 / ${bbInputValue(chips)} BB`;
+}
+function bbInputValue(chips) {
+  return String(Number((chips / rt.session.blindLevel.bb).toFixed(6)));
+}
 
 /* ---------------------------------------------------------------- 运行时 */
 
@@ -1095,7 +1102,7 @@ function renderConsole() {
   const toCall = rt.view.to_call || 0;
   setStatus(rt.coord?.viewPending()
     ? "正在更新局面…"
-    : `轮到你（${heroSeat}号座）行动 · 需跟注 ${fmtChips(toCall)} 筹码 / ${chipsToBBText(toCall, s.blindLevel.bb)}BB`);
+    : `轮到你（${heroSeat}号座）行动 · 需跟注 ${actionAmount(toCall)}`);
   renderActionButtons(true);
 }
 
@@ -1104,7 +1111,6 @@ function renderActionButtons(isHero) {
   const s = rt.session;
   const view = rt.view;
   if (!view) { area.innerHTML = ""; return; }
-  const bb = s.blindLevel.bb;
   const pending = rt.coord.viewPending();
   const dis = pending ? "disabled" : "";
   const btn = (action, label, cls = "") =>
@@ -1112,15 +1118,23 @@ function renderActionButtons(isHero) {
   const seat = view.actor_seat_id;
   const toCall = view.to_call || 0;
   let html = seat == null ? "" : (view.can_fold ? btn(`fold:${seat}`, "弃牌") : "")
-    + btn(`call:${seat}`, toCall > 0 ? `跟注 ${fmtChips(toCall)} / ${chipsToBBText(toCall, bb)}BB` : "过牌");
+    + btn(`call:${seat}`, toCall > 0 ? `跟注 ${actionAmount(toCall)}` : "过牌");
   const minTo = view.min_raise_to;
   const maxTo = view.max_raise_to;
   if (minTo != null && maxTo != null && minTo <= maxTo) {
+    const unit = rt.unit === "bb" ? "BB" : "筹码";
+    const value = rt.unit === "bb" ? bbInputValue(minTo) : String(minTo);
+    const maxValue = rt.unit === "bb" ? bbInputValue(maxTo) : String(maxTo);
     html += btn(`allin:${seat}`, "全下", "allin")
-      + `<span class="raise-box"><label>加注到
-          <input type="number" id="raise-input" inputmode="numeric" value="${minTo}" min="${minTo}" max="${maxTo}">
-          （${chipsToBBText(minTo, bb)}–${chipsToBBText(maxTo, bb)}BB）</label>
-          <button type="button" class="act-btn" data-act="raise:${seat}" ${dis}>加注</button></span>`;
+      + `<div class="raise-box"><label for="raise-input">加注到（本街总额）</label>
+          <div class="raise-entry"><input type="number" id="raise-input" inputmode="${rt.unit === "bb" ? "decimal" : "numeric"}"
+            value="${value}" min="${value}" max="${maxValue}" step="${rt.unit === "bb" ? "any" : "1"}"
+            data-initial-value="${value}" data-initial-chips="${minTo}" ${dis}
+            aria-describedby="raise-range raise-conversion raise-error"><span>${unit}</span>
+          <button type="button" class="act-btn" data-act="raise:${seat}" ${dis}>加注</button></div>
+          <div id="raise-range" class="tip">可加注到 ${value}～${maxValue} ${unit}</div>
+          <div id="raise-conversion" class="tip" aria-live="polite"></div>
+          <div id="raise-error" class="form-error" role="alert"></div></div>`;
   }
   const need = nextBoardNeed();
   if (need) html += `<button type="button" class="ghost-btn" data-act="deal-board" ${pending || rt.gridMode === "board" ? "disabled" : ""}>发${STREET_LABEL[view.street] || ""}（${need} 张）</button>`;
@@ -1134,11 +1148,35 @@ function renderActionButtons(isHero) {
   area.querySelector("#raise-input")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); onActButton(`raise:${view.actor_seat_id}`); }
   });
+  area.querySelector("#raise-input")?.addEventListener("input", updateRaisePreview);
+  updateRaisePreview();
+}
+
+function raiseInputChips(input, confirmRound = false) {
+  // Displaying a repeating BB fraction must not change the exact engine minimum.
+  if (input.value === input.dataset.initialValue) return Number(input.dataset.initialChips);
+  return amountInput(input.value, rt.unit, rt.session.blindLevel.bb, confirmRound);
+}
+
+function updateRaisePreview() {
+  const input = $("#raise-input");
+  if (!input) return;
+  $("#raise-error").textContent = "";
+  input.removeAttribute("aria-invalid");
+  try {
+    const to = raiseInputChips(input);
+    const bet = rt.view.seats.find(seat => seat.seat_id === rt.view.actor_seat_id)?.bet || 0;
+    const conversion = rt.unit === "bb" ? chipsFromBB(input.value, rt.session.blindLevel.bb) : null;
+    const rounding = conversion?.changed && input.value !== input.dataset.initialValue ? "（需取整确认）" : "";
+    $("#raise-conversion").textContent = `总额 ${fmtChips(to)} 筹码${rounding} · 本次再投入 ${fmtChips(Math.max(0, to - bet))} 筹码`;
+  } catch {
+    $("#raise-conversion").textContent = "";
+  }
 }
 
 function onActButton(spec) {
   const view = rt.view;
-  if (!view) return;
+  if (!view || rt.conflict || rt.committing || rt.coord.viewPending()) return;
   const [action, seatStr] = spec.split(":");
   const seatId = Number(seatStr) || view.actor_seat_id;
   if (action === "fold") return submitAction({ op: "action", seat_id: seatId, type: "fold" });
@@ -1146,9 +1184,20 @@ function onActButton(spec) {
   if (action === "allin") return submitAction({ op: "action", seat_id: seatId, type: "allin" });
   if (action === "raise") {
     const input = $("#raise-input");
-    const to = Number(input?.value);
-    if (!Number.isSafeInteger(to)) return setStatus("加注额必须为整数筹码");
-    return submitAction({ op: "action", seat_id: seatId, type: "raise", to });
+    if (!input) return;
+    try {
+      const to = raiseInputChips(input);
+      if (view.min_raise_to == null || view.max_raise_to == null || to < view.min_raise_to || to > view.max_raise_to) {
+        throw new Error(`加注总额须在 ${actionAmount(view.min_raise_to)} 至 ${actionAmount(view.max_raise_to)} 之间`);
+      }
+      raiseInputChips(input, true);
+      return submitAction({ op: "action", seat_id: seatId, type: "raise", to });
+    } catch (e) {
+      $("#raise-error").textContent = e.message;
+      input.setAttribute("aria-invalid", "true");
+      input.focus({preventScroll: true});
+      return;
+    }
   }
   if (action === "undo") return onUndo();
   if (action === "manual-close") return onManualClose();
@@ -1276,7 +1325,7 @@ function renderAdvanced() {
   if (!unitSel) {
     const wrap = document.createElement("div");
     wrap.className = "setup-row";
-    wrap.innerHTML = `<label>显示单位
+    wrap.innerHTML = `<label>显示 / 加注单位
       <select id="tg-unit-live"><option value="bb">BB 优先</option>
       <option value="chips">筹码优先</option></select></label>
       <button type="button" class="ghost-btn" id="tg-export">导出会话</button>
@@ -1285,10 +1334,23 @@ function renderAdvanced() {
     unitSel = wrap.querySelector("#tg-unit-live");
     unitSel.value = rt.unit;
     unitSel.addEventListener("change", (e) => {
+      const oldInput = $("#raise-input");
+      let draft;
+      try { if (oldInput) draft = raiseInputChips(oldInput, true); }
+      catch (error) {
+        if (error.code === "cancelled") { unitSel.value = rt.unit; return; }
+      }
       rt.unit = e.target.value;
       rt.session.displayUnit = rt.unit;
       persist();
       renderAll();
+      const input = $("#raise-input");
+      if (input && draft !== undefined) {
+        input.value = rt.unit === "bb" ? bbInputValue(draft) : String(draft);
+        input.dataset.initialValue = input.value;
+        input.dataset.initialChips = String(draft);
+        updateRaisePreview();
+      }
     });
     wrap.querySelector("#tg-export").addEventListener("click", () => {
       downloadRaw(JSON.stringify(rt.session, null, 2));

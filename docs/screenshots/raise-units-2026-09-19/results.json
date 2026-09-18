@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "checks": [
+    "BB and chip input",
+    "draft conversion during unit switch",
+    "real raise payloads",
+    "invalid amounts blocked",
+    "fractional chip confirmation and cancellation",
+    "reload preserves unit",
+    "all-in limit",
+    "repeating decimal minimum",
+    "mobile layout",
+    "current-street additional contribution",
+    "call is independent of raise input"
+  ]
+}

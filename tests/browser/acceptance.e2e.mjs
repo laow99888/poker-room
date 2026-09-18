@@ -172,7 +172,7 @@ try {
   assert.equal((await read()).currentHand.ops[1].type,'fold');
   page.once('dialog',d=>d.accept());await click('[data-action="replay-hand"]');await cards();await page.waitForSelector('.rec-primary',{timeout:60000});
   await fail('advice');await action('call',1);assert.equal(await page.$('.rec-primary'),null);
-  await fill('#raise-input',400);await click('[data-act="raise:2"]');await page.waitForSelector('[data-act="call:3"]:not([disabled])');
+  await fill('#raise-input',2);await click('[data-act="raise:2"]');await page.waitForSelector('[data-act="call:3"]:not([disabled])');
   for(const sid of [3,4,5,6]) await action('call',sid);
   await page.waitForSelector('#retry-advice');assert.equal(await page.$('.rec-primary'),null);
   assert.equal((await read()).currentHand.ops.length,6);assert(await page.$('[data-act="call:1"]:not([disabled])'));
