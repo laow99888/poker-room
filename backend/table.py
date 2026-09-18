@@ -88,17 +88,28 @@ def build_state(config: dict) -> "NoLimitTexasHoldem":
     # replay_state 统一固定（否则同一手牌两次回放烧牌序列不同，view/advice
     # 会漂移）；这里不再自行固定种子。
     try:
-        return NoLimitTexasHoldem.create_state(
-            automations=_AUTOMATIONS,
-            ante_trimming_status=True,
-            raw_antes=ante,
-            raw_blinds_or_straddles=(sb, bb),
-            min_bet=bb,
-            raw_starting_stacks=[int(x) for x in stacks],
-            player_count=player_count,
-        )
+        return _create_engine_state(player_count, sb, bb, ante, stacks, bb)
     except ValueError as exc:
         raise TableError(f"筹码设置无法开局（检查是否有座位付不起盲注/前注）：{exc}") from exc
+
+
+def _create_engine_state(player_count, first_blind, second_blind, ante,
+                         stacks, min_bet):
+    """引擎状态创建（P05 适配层专用）。
+
+    first/second_blind 是传给 PokerKit 的原始盲注向量：常规 (sb, bb)；
+    两人局 (sb, bb) 配 [BB, BTN/SB] 顺序（PokerKit 会反转向量）；
+    无小盲 (bb, 0)。player_count 已由调用方验证（legacy 6/8/9 或 v2 2–9）。
+    """
+    return NoLimitTexasHoldem.create_state(
+        automations=_AUTOMATIONS,
+        ante_trimming_status=True,
+        raw_antes=ante,
+        raw_blinds_or_straddles=(first_blind, second_blind),
+        min_bet=min_bet,
+        raw_starting_stacks=[int(x) for x in stacks],
+        player_count=player_count,
+    )
 
 
 def deal_hole(state, hero_index: int, hero_cards, reserve=()) -> dict:
@@ -156,10 +167,18 @@ def _apply_action(state, op) -> None:
     if actor is None:
         raise TableError("当前没有待行动玩家（可能该发公共牌了）")
     seat = op.get("seat")
-    if seat is not None and seat not in positions:
-        raise TableError(f"未知座位：{seat!r}")
-    if seat is not None and positions.index(seat) != actor:
-        raise TableError(f"轮到 {positions[actor]} 行动，不是 {seat}")
+    seat_index = op.get("seat_index")
+    if seat_index is not None:
+        # v2：直接用引擎索引（由 seat_id 映射而来）
+        if not isinstance(seat_index, int) or not 0 <= seat_index < state.player_count:
+            raise TableError(f"引擎座位索引非法：{seat_index!r}")
+        if seat_index != actor:
+            raise TableError(f"轮到 {positions[actor]} 行动，不是该座位")
+    elif seat is not None:
+        if seat not in positions:
+            raise TableError(f"未知座位：{seat!r}")
+        if positions.index(seat) != actor:
+            raise TableError(f"轮到 {positions[actor]} 行动，不是 {seat}")
 
     kind = op.get("type")
     if kind == "fold":
@@ -324,3 +343,127 @@ def replay_state(config: dict, hero_pos: str, hero_cards, ops):
         finally:
             random.setstate(rng_state)
     raise last_err
+
+
+# ------------------------------------------------------------------ v2 连续牌桌
+
+def replay_context(context: dict, hero_cards, ops):
+    """v2 回放：物理座位上下文 → 引擎。
+
+    context 须先经 backend.table_context.validate_context 验证。
+    返回 (state, plan, dealt)；dealt 以引擎索引为键。
+    """
+    from . import table_context   # 延迟导入避免循环
+
+    plan = table_context.engine_plan(context)
+    state = _create_engine_state(
+        plan["player_count"], plan["raw_blinds"][0], plan["raw_blinds"][1],
+        plan["antes"], plan["stacks"], plan["min_bet"])
+    hero_index = plan["seat_to_index"][plan["hero_seat_id"]]
+    declared_board = [c for op in ops if op.get("op") == "board"
+                      for c in op.get("cards", [])]
+    dealt = deal_hole(state, hero_index, hero_cards, reserve=declared_board)
+    v2_ops = []
+    for op in ops:
+        if op.get("op") == "action":
+            sid = op.get("seat_id")
+            idx = plan["seat_to_index"].get(sid)
+            if idx is None:
+                raise TableError(f"seat_id {sid!r} 不是本手入局者")
+            v2_ops.append({"op": "action", "seat_index": idx,
+                           "type": op.get("type"), "to": op.get("to")})
+        else:
+            v2_ops.append(op)
+    apply_ops(state, v2_ops, dealt=dealt, hero_index=hero_index)
+    return state, plan, dealt
+
+
+def build_view_v2(state, context: dict, plan: dict, dealt: dict) -> dict:
+    """A02：v2 视图——以固定 seat_id 为身份，含结算预览。"""
+    occ_by_seat = {p["seat_id"]: p["occupant_id"] for p in context["participants"]}
+    chips_by_seat = {p["seat_id"]: p["starting_chips"] for p in context["participants"]}
+    hero_seat = plan["hero_seat_id"]
+    hero_index = plan["seat_to_index"][hero_seat]
+    roles = plan["roles_by_seat"]
+    folded = _folded_indices(state)
+    seats = []
+    for i, sid in enumerate(plan["index_to_seat"]):
+        seats.append({
+            "seat_id": sid,
+            "occupant_id": occ_by_seat[sid],
+            "range_position": plan["range_positions"][i],
+            "roles": roles.get(sid, []),
+            "stack": int(state.stacks[i]),
+            "bet": int(state.bets[i]),
+            "in_hand": bool(state.statuses[i]),
+            "folded": i in folded,
+            "all_in": bool(state.statuses[i]) and state.stacks[i] == 0,
+            "is_hero": sid == hero_seat,
+            "starting_chips": chips_by_seat[sid],
+        })
+    actor_seat = (plan["index_to_seat"][state.actor_index]
+                  if state.actor_index is not None else None)
+    street = STREETS[state.street_index] if state.street_index is not None else "over"
+    known = set(dealt[hero_index]) | {
+        repr(c) for street_cards in state.board_cards for c in street_cards}
+    view = {
+        "street": street,
+        "board": [repr(c) for street_cards in state.board_cards for c in street_cards],
+        "taken": sorted(known),
+        "pot": state.total_pot_amount,
+        "seats": seats,
+        "actor_seat_id": actor_seat,
+        "hand_over": not state.status,
+        "hero": {
+            "seat_id": hero_seat,
+            "occupant_id": context["hero_occupant_id"],
+            "cards": dealt[hero_index],
+            "stack": int(state.stacks[hero_index]),
+        },
+        "settlement_preview": settlement_preview(state, plan, dealt),
+    }
+    if actor_seat is not None:
+        view["to_call"] = state.checking_or_calling_amount
+        view["min_raise_to"] = state.min_completion_betting_or_raising_to_amount
+        view["max_raise_to"] = state.max_completion_betting_or_raising_to_amount
+    return view
+
+
+def _folded_indices(state) -> set:
+    """从操作日志取弃牌者引擎索引（状态位在结算后会被清除）。"""
+    return {op.player_index for op in state.operations
+            if type(op).__name__ == "Folding"}
+
+
+def settlement_preview(state, plan: dict, dealt: dict) -> dict:
+    """C03：结算预览——分类依据动作与已知信息，不用模拟赢家推断。
+
+    - 手进行中（未手工结束）：not_ready，不给任何行建议。
+    - 手结束且无摊牌（其余全弃，含未跟注超额退回）：全部行 verified。
+    - 手结束但有摊牌：摊牌者行 unknown（占位牌收益不是事实），弃牌者 verified。
+    """
+    folded = _folded_indices(state)
+    if state.status:
+        rows = []
+        for i, sid in enumerate(plan["index_to_seat"]):
+            if i in folded:
+                rows.append({"seat_id": sid, "suggested_chips": int(state.stacks[i]),
+                             "source": "verified", "reason": "folded"})
+            else:
+                rows.append({"seat_id": sid, "suggested_chips": None,
+                             "source": "unknown", "reason": "incomplete_record"})
+        return {"status": "not_ready", "reason": "incomplete_record", "rows": rows}
+    showdown = (plan["player_count"] - len(folded)) >= 2
+    rows = []
+    for i, sid in enumerate(plan["index_to_seat"]):
+        if showdown and i not in folded:
+            rows.append({"seat_id": sid, "suggested_chips": None,
+                         "source": "unknown", "reason": "unobserved_showdown"})
+        else:
+            rows.append({"seat_id": sid, "suggested_chips": int(state.stacks[i]),
+                         "source": "verified", "reason": "folded" if i in folded else "fold_win"})
+    return {
+        "status": "needs_manual",
+        "reason": "unknown_showdown" if showdown else "fold_win",
+        "rows": rows,
+    }

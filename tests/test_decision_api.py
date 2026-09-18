@@ -382,11 +382,11 @@ def test_invalid_names_and_payouts_are_4xx():
            {"op": "action", "type": "fold", "seat": "CO"},
            {"op": "action", "type": "fold", "seat": "BTN"},
            {"op": "action", "type": "fold", "seat": "SB"}]
-    r = client.post("/api/stats/record", json={"config": cfg, "hero_pos": "BB",
+    r = client.post("/api/stats/record", json={"config": cfg, "hero_pos": "BB", "learning_enabled": True,
                    "hero_cards": ["As", "Ad"], "ops": ops, "names": {"BB": 123}})
     assert r.status_code == 422
     r2 = client.post("/api/stats/record", json={"config": cfg, "hero_pos": "BB",
-                      "hero_cards": ["As", "Ad"], "ops": ops,
+                      "hero_cards": ["As", "Ad"], "ops": ops, "learning_enabled": True,
                       "names": {"BB": "_seen"}})
     assert r2.status_code == 200       # 保留前缀安全降级为无名
     r3 = client.post("/api/hand/view", json={"config": {

@@ -63,7 +63,7 @@ def test_narrowing_flags_in_advice(stats_file):
     payload = {
         "config": {"player_count": 6, "sb": 100, "bb": 200, "ante": 25},
         "hero_pos": "BB", "hero_cards": ["As", "Ad"],
-        "names": {"UTG": "testn"},
+        "names": {"UTG": "testn"}, "learning_enabled": True,
         "ops": [{"op": "action", "type": "raise", "to": 600, "seat": "UTG"},
                 {"op": "action", "type": "fold", "seat": "HJ"},
                 {"op": "action", "type": "fold", "seat": "CO"},
@@ -125,7 +125,7 @@ def test_hand_id_via_api(stats_file):
            {"op": "action", "type": "fold", "seat": "CO"},
            {"op": "action", "type": "fold", "seat": "BTN"},
            {"op": "action", "type": "fold", "seat": "SB"}]
-    payload = {"config": cfg, "hero_pos": "BTN",
+    payload = {"config": cfg, "hero_pos": "BTN", "learning_enabled": True,
                "hero_cards": ["As", "Ad"], "ops": ops, "names": {"BTN": "阿强"}}
     for hid in ("api-1", "api-2"):
         payload["hand_id"] = hid

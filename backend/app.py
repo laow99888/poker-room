@@ -88,6 +88,7 @@ class HandIn(BaseModel):
     seed: Optional[int] = None
     names: Dict[str, str] = {}      # 31：座位 → 对手代号，值必须是字符串
     hand_id: Optional[str] = None   # 前端生成的手牌唯一标识（14：记录幂等键）
+    learning_enabled: bool = False  # A04：默认关闭；需学习的调用方显式开启
 
 
 def _config_dump(config: HandConfigIn) -> dict:
@@ -158,7 +159,8 @@ def hand_advice_api(payload: HandIn, request: Request):
     try:
         advice = decision.advice_for(state, hero_index, payload.iterations,
                                      payload.seed, payload.names,
-                                     uid=_player_id(request))
+                                     uid=_player_id(request),
+                                     learning_enabled=payload.learning_enabled)
     except TableError as exc:
         raise HTTPException(400, str(exc))
     return {**view, "advice": advice}
@@ -172,7 +174,13 @@ def _player_id(request: Request) -> str:
 
 @app.post("/api/stats/record")
 def stats_record_api(payload: HandIn, request: Request):
-    """手牌结束后调用：把本手计入对手档案（按 hand_id/签名去重，可安全重复提交）。"""
+    """手牌结束后调用：把本手计入对手档案（按 hand_id/签名去重，可安全重复提交）。
+
+    A04：learning_enabled 默认 False → 409 拒绝且不写任何数据；
+    需要学习的旧调用方必须显式开启。
+    """
+    if not payload.learning_enabled:
+        raise HTTPException(409, "学习记录未启用")
     state, hero_index, _ = _replay_or_400(payload)
     if state.status:
         raise HTTPException(400, "手牌尚未结束，无法记录")
@@ -210,5 +218,83 @@ def stats_summary_api(request: Request):
     return data
 
 
+# ------------------------------------------------------------- v2 连续牌桌
+
+from . import table_context  # noqa: E402
+
+
+def _context_of(body: dict) -> dict:
+    ctx = body.get("context")
+    if not isinstance(ctx, dict):
+        raise HTTPException(400, "v2 请求缺少 context")
+    try:
+        return table_context.validate_context(ctx)
+    except TableError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/table/prepare")
+def table_prepare_api(payload: dict):
+    """A01：验证 HandContext 并返回规范化映射；只读，不写用户数据。"""
+    if payload.get("protocol_version") != 2:
+        raise HTTPException(400, "protocol_version 必须为 2")
+    context = _context_of(payload)
+    try:
+        plan = table_context.engine_plan(context)
+    except TableError as exc:
+        raise HTTPException(400, str(exc))
+    return {
+        "context": context,
+        "mapping": table_context.mapping(context, plan),
+        "warnings": [],
+    }
+
+
+def _v2_hand(body: dict, request: Request, want_advice: bool) -> dict:
+    if body.get("protocol_version") != 2:
+        raise HTTPException(400, "protocol_version 必须为 2")
+    context = _context_of(body)
+    try:
+        plan = table_context.engine_plan(context)
+        state, plan, dealt = table_replay_context(context, body.get("hero_cards") or [],
+                                                  body.get("ops") or [])
+    except TableError as exc:
+        raise HTTPException(400, str(exc))
+    hero_index = plan["seat_to_index"][plan["hero_seat_id"]]
+    view = table_build_view_v2(state, context, plan, dealt)
+    if want_advice:
+        if view["hand_over"]:
+            raise HTTPException(400, "这手牌已经结束")
+        if view["actor_seat_id"] != plan["hero_seat_id"]:
+            raise HTTPException(400, "还没轮到你行动")
+        try:
+            advice = decision.advice_for(
+                state, hero_index, body.get("iterations", 50000),
+                body.get("seed"), None,
+                uid=_player_id(request),
+                learning_enabled=context["learning_enabled"])
+        except TableError as exc:
+            raise HTTPException(400, str(exc))
+        return {**view, "hand_id": body.get("hand_id"), "advice": advice}
+    return {**view, "hand_id": body.get("hand_id")}
+
+
+from .table import replay_context as table_replay_context  # noqa: E402
+from .table import build_view_v2 as table_build_view_v2  # noqa: E402
+
+
+@app.post("/api/hand/v2/view")
+def hand_view_v2_api(payload: dict, request: Request):
+    return _v2_hand(payload, request, want_advice=False)
+
+
+@app.post("/api/hand/v2/advice")
+def hand_advice_v2_api(payload: dict, request: Request):
+    return _v2_hand(payload, request, want_advice=True)
+
+
 _FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/", StaticFiles(directory=str(_FRONTEND), html=True), name="static")
+
+
+

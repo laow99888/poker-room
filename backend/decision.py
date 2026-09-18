@@ -481,8 +481,12 @@ def _side_pots(state, hero_index: int, to_call: int):
 
 
 def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
-               uid="local") -> dict:
-    """计算英雄当前决策建议（必须轮到英雄行动）。uid 用于隔离对手档案。"""
+               uid="local", learning_enabled: bool = False) -> dict:
+    """计算英雄当前决策建议（必须轮到英雄行动）。uid 用于隔离对手档案。
+
+    learning_enabled=False（默认）时只读基础位置范围+本手动作推断，
+    不读取具名档案与共享人群统计（契约 A04）。
+    """
     if state.status is False:
         raise TableError("这手牌已经结束")
     if state.actor_index != hero_index:
@@ -504,9 +508,10 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
         pos = positions[i]
         line = intel[i]["line"]
         codes, combos, label = _range_for(pos, line)
-        name = (names.get(pos) or "").strip()
-        stats = opponents_mod.get_stats(name, uid=uid) if name else None
-        pool = opponents_mod.get_pool(pos)
+        name = (names.get(pos) or "").strip() if learning_enabled else ""
+        stats = (opponents_mod.get_stats(name, uid=uid)
+                 if learning_enabled and name else None)
+        pool = opponents_mod.get_pool(pos) if learning_enabled else None
         narrowed = False
         keep_frac = 1.0
         range_source = "位置图"
