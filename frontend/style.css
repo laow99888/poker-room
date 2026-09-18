@@ -580,6 +580,9 @@ button, input, select, summary { touch-action: manipulation; }
 #table-oval { height: 440px; }
 .seat { width: 104px; max-width: 104px; min-width: 0; min-height: 74px; border-radius: 6px; padding: 6px; }
 .seat .pos-tag { white-space: normal; }
+.seat-position { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 2px 5px; margin: 2px 0; font-size: 11px; line-height: 1.25; color: var(--gold); }
+.position-code { font-weight: 700; white-space: nowrap; }
+.position-name { color: var(--muted); font-size: 10px; }
 .seat .pos-tag .pos-tag { display: inline; }
 .seat .bb-tag { display: block; font-size: 11px; }
 .estimated-label { display: block; font: 10px var(--sans); color: var(--muted); }
@@ -609,9 +612,12 @@ button, input, select, summary { touch-action: manipulation; }
   .setup-table { height: 350px; }
   .setup-seat { width: 68px; font-size: 12px; min-height: 54px; }
   #table-oval { height: 460px; padding: 0; border: 0; }
-  .seat { width: 68px; max-width: 68px; min-height: 72px; padding: 4px 2px; }
+  .seat { width: 68px; max-width: 68px; min-height: 72px; padding: 4px 2px; font-size: 12px; line-height: 1.2; }
   .seat .stack { font-size: 12px; }
   .seat .bb-tag, .seat .pos-tag { font-size: 10px; }
+  .seat > .pos-tag { line-height: 12px; }
+  .seat-position { display: block; font-size: 10px; line-height: 12px; margin: 0; }
+  .position-name { display: none; }
   .badge.acting-tag { font-size: 10px; padding: 1px 2px; }
   #table-center { width: min(174px, calc(100% - 172px)); top: 49%; }
   #board-slots .slot { height: 46px; font-size: 18px; }

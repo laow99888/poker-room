@@ -44,6 +44,7 @@ try {
   assert(await page.$('#setup-panel.zone-focus'));
   await click('#tg-create');
   await page.waitForSelector('#deck-panel.zone-focus');
+  assert.deepEqual(await page.$$eval('#seat-layer .position-code', es => es.map(e => e.textContent)), ['SB','BB','UTG','HJ','CO','BTN']);
   await click('[data-card="As"]');
   assert.equal(await page.$eval('#selection-count', e => e.textContent), '1 / 2');
   assert.equal(await page.$$eval('#hero-cards .hero-card:not(.vacant)', es => es.length), 1);
@@ -59,6 +60,7 @@ try {
   assert.equal(await page.$eval('[data-card="As"]', e => getComputedStyle(e).opacity), '1');
   for (const id of [3, 4, 5, 6]) await click(`[data-act="fold:${id}"]:not([disabled])`);
   await page.waitForSelector('#advice .big', {timeout:60000});
+  assert.deepEqual(await page.$$eval('#seat-layer .position-code', es => es.map(e => e.textContent)), ['SB','BB','UTG','HJ','CO','BTN'], 'folded players retain their hand positions');
   assert(await page.$('#advice-panel.result-focus'));
   await shot('desktop-advice');
   await click('[data-act="call:1"]:not([disabled])');
@@ -76,6 +78,10 @@ try {
     await columns();
     await fit();
   }
+  await fresh(1440, '8');
+  await click('[data-button="8"]'); await click('#tg-create');
+  await page.waitForSelector('#deck-panel.zone-focus');
+  assert.deepEqual(await page.$$eval('#seat-layer .position-code', es => es.map(e => e.textContent)), ['SB','BB','UTG','UTG+1','MP','HJ','CO','BTN']);
   for (const width of [320, 375, 390, 768, 1440]) {
     await fresh(width, '9');
     await fit();
@@ -83,6 +89,7 @@ try {
     await click('[data-button="9"]');
     await click('#tg-create');
     await page.waitForSelector('#deck-panel.zone-focus');
+    assert.deepEqual(await page.$$eval('#seat-layer .position-code', es => es.map(e => e.textContent)), ['SB','BB','UTG','UTG+1','UTG+2','MP','HJ','CO','BTN']);
     await fit();
     const overlap = await page.evaluate(() => {
       const seats = [...document.querySelectorAll('#seat-layer .seat')].map(e => e.getBoundingClientRect());
@@ -90,7 +97,7 @@ try {
         Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
         Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1));
     });
-    assert(!overlap, `overlapping seats at ${width}`);
+    assert(!overlap, `overlapping seats at ${width}: ${JSON.stringify(await page.$$eval('#seat-layer .seat', es => es.map(e => ({seat:e.dataset.seat, rect:e.getBoundingClientRect().toJSON()}))))}`);
     if (width < 768) {
       await page.$eval('[data-card="As"]', e => e.scrollIntoView({block:'center'}));
       await page.tap('[data-card="As"]');
@@ -105,7 +112,7 @@ try {
     'three desktop columns', 'setup and workflow highlights', 'first-card preview',
     'keyboard selection and stable focus', 'confirmed-card visibility', 'real API advice',
     'public-card preview and cancel', 'nine-seat responsive layouts', 'mobile touch selection',
-    'reduced motion', 'no browser errors'
+    'reduced motion', 'no browser errors', '6/8/9 seat position labels and unchanged labels after folds'
   ]}, null, 2));
   console.log('PASS: workspace layout, card feedback, real advice and responsive touch checks');
 } catch (error) {

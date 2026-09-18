@@ -43,6 +43,7 @@ try {
   await waitHand(2);
   s = await read();
   assert.equal(s.positions.buttonSeatId,1);
+  assert.deepEqual(await page.$$eval('#seat-layer .position-code', es => es.map(e => e.textContent)), ['BTN','SB','BB','UTG','HJ','CO']);
   assert.equal(s.occupants[s.heroOccupantId].confirmedChips,9900);
   await page.setViewport({width:390,height:844});
   await shot('mobile-next-hand');

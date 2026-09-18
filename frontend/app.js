@@ -25,6 +25,11 @@ const SUITS = ["s", "h", "d", "c"];
 const SUIT_GLYPH = { s: "♠", h: "♥", d: "♦", c: "♣" };
 const IS_RED = { s: false, h: true, d: true, c: false };
 const STREET_LABEL = { preflop: "翻牌前", flop: "翻牌", turn: "转牌", river: "河牌" };
+const POSITION_NAMES = {
+  BTN: "庄位", SB: "小盲", BB: "大盲", UTG: "枪口位",
+  "UTG+1": "枪口后1位", "UTG+2": "枪口后2位",
+  MP: "中位", HJ: "劫位", CO: "关煞位",
+};
 
 function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g,
@@ -897,7 +902,10 @@ function renderSeats() {
     }
     const vs = viewSeats?.get(seat.id);
     const roles = rolesForSeat(s, seat.id);
-    const roleTag = roles.length ? `<span class="pos-tag">${roles.join("/")}</span>` : "";
+    const position = roles.join("/") || vs?.range_position || rangePositionFor(s, seat.id);
+    const positionName = (position || "").split("/").map(role => POSITION_NAMES[role] || role).join("/");
+    const roleTag = position ? `<div class="seat-position" title="${esc(positionName)}" aria-label="${esc(position)} ${esc(positionName)}">
+      <span class="position-code">${esc(position)}</span><span class="position-name">${esc(positionName)}</span></div>` : "";
     const isHero = occ.id === s.heroOccupantId;
     const row = s.settlementDraft?.rows.find(r => r.occupantId === occ.id);
     const stack = row ? row.finalChips : vs ? vs.stack : occ.confirmedChips;
@@ -905,7 +913,7 @@ function renderSeats() {
     const allIn = vs?.all_in;
     const acting = s.phase === "playing" && rt.view && rt.view.actor_seat_id === seat.id && !rt.view.hand_over;
     html.push(`<div class="seat${isHero ? " hero" : ""}${acting ? " acting" : ""}${folded ? " folded" : ""}" style="left:${xy.x}%;top:${xy.y}%" data-seat="${seat.id}">
-      <div class="pos-tag">${seat.id}号座${isHero ? " · 你" : ""} ${roleTag}</div>
+      <div class="pos-tag">${seat.id}号座${isHero ? " · 你" : ""}</div>${roleTag}
       <div class="stack">${stack === null ? "待核对" : rt.unit === "chips" ? fmtChips(stack) : chipsToBBText(stack, s.blindLevel.bb) + " BB"}
         <span class="bb-tag">${stack === null ? "" : rt.unit === "chips" ? chipsToBBText(stack, s.blindLevel.bb) + " BB" : fmtChips(stack)}</span>${occ.chipsEstimated && !row ? '<span class="estimated-label">估算</span>' : ""}</div>
       ${allIn ? '<span class="badge badge-allin">全下</span>' : ""}

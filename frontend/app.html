@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>大魔丸 · 锦标赛逐手记录与局面推演</title>
-<link rel="stylesheet" href="style.css?v=20260923bb">
+<link rel="stylesheet" href="style.css?v=20260923positions">
 </head>
 <body>
 <div class="felt-vignette" aria-hidden="true"></div>
@@ -96,6 +96,7 @@
         <p>逐手录入牌桌上的实际动作；系统按已录入信息做位置感知的局面推演（范围、胜率、赔率均为基于假设范围的估算）。</p>
         <p>对手底牌未录入时不会推断真实输赢：未知摊牌的手，请在结算页核对实际筹码后确认，模拟收益不会计入下一手。</p>
         <p>每手结束可修改全桌最终实际余额；确认后自动轮转庄位并进入下一手。所有金额可同时以大盲（BB）与筹码显示。</p>
+        <p>位置：BTN 庄位，SB 小盲，BB 大盲，UTG 枪口位，UTG+1 / UTG+2 枪口后第1 / 第2位，MP 中位，HJ 劫位，CO 关煞位。座位编号不变，位置随庄位轮转；单挑时庄位兼小盲，显示 BTN/SB。</p>
       </div>
     </details>
   </section>
@@ -162,6 +163,6 @@
 
 <div id="modal-root"></div>
 
-<script type="module" src="app.js?v=20260923bb"></script>
+<script type="module" src="app.js?v=20260923positions"></script>
 </body>
 </html>
