@@ -384,3 +384,43 @@ def test_a09_v2_legacy_same_engine_outcome():
     pos_to_seat = {"SB": 1, "BB": 2, "UTG": 3, "HJ": 4, "CO": 5, "BTN": 6}
     for pos, seat in pos_to_seat.items():
         assert legacy_stacks[pos] == v2_stacks[seat], (pos, seat)
+
+
+# ------------------------------------------------- A-04/A-05 学习记录（v2）
+
+def test_a04_v2_record_complete_hand_with_uid():
+    """A-04：开启学习、完整牌谱 → 记录进 X-Player-Id 命名空间；
+    同 handId 重复提交幂等（A-05）。"""
+    context, plan, _ = normalize_ctx(
+        learning_enabled=True, profile_names={"P2": "老王", "P6": "阿强"})
+    ops = folds(3, 4, 5, 6, 1)
+    body = {"protocol_version": 2, "hand_id": "h-a4",
+            "context": context, "hero_cards": ["As", "Ad"], "ops": ops}
+    r = client.post("/api/hand/v2/record",
+                    headers={"X-Player-Id": "u-a4"}, json=body)
+    assert r.status_code == 200, r.text
+    assert r.json()["recorded"]["recorded"] is True
+    user = opponents_mod._load()["users"]["u-a4"]
+    # 代号按 range_position 落库（P2=BB、P6=BTN），其余进人群池
+    assert "老王" in user["named"] and "阿强" in user["named"]
+    r2 = client.post("/api/hand/v2/record",
+                     headers={"X-Player-Id": "u-a4"}, json=body)
+    assert r2.status_code == 200
+    assert r2.json()["recorded"]["recorded"] is False    # A-05：幂等
+
+
+def test_a03_v2_record_closed_returns_409():
+    context, plan, _ = normalize_ctx()                   # learning_enabled=False
+    r = client.post("/api/hand/v2/record", json={
+        "protocol_version": 2, "hand_id": "h-a3", "context": context,
+        "hero_cards": ["As", "Ad"], "ops": folds(3, 4, 5, 6, 1)})
+    assert r.status_code == 409
+    assert "未启用" in r.json()["detail"]
+
+
+def test_v2_record_rejects_incomplete_hand():
+    context, plan, _ = normalize_ctx(learning_enabled=True)
+    r = client.post("/api/hand/v2/record", json={
+        "protocol_version": 2, "hand_id": "h-inc", "context": context,
+        "hero_cards": ["As", "Ad"], "ops": folds(3, 4)})  # 打到一半
+    assert r.status_code == 400

@@ -24,13 +24,18 @@ function stillCurrent(liveSession, captured) {
   return matches(sourceOf(liveSession), captured);
 }
 
-export function createCoordinator(session) {
+export function createCoordinator(session, getHeaders = null) {
   let viewReq = null;     // {id, source, controller, state}
   let adviceReq = null;
   let live = session;     // 实时会话引用；守卫按其当前 revision 比对（S03）
   let counter = 0;
 
   function nextId() { counter += 1; return `r${counter}`; }
+
+  // 27/A-04：匿名用户命名空间随请求头走（画像归属），view 也带上保持一致
+  function headers() {
+    return { "Content-Type": "application/json", ...(getHeaders ? getHeaders() : {}) };
+  }
 
   return {
     /** 手/会话推进时调用：作废全部在途请求（守卫起效，Abort 仅为优化）。 */
@@ -59,7 +64,7 @@ export function createCoordinator(session) {
         try {
           const res = await fetch("/api/hand/v2/view", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: headers(),
             body: JSON.stringify(payload),
             signal: controller ? controller.signal : undefined,
           });
@@ -100,7 +105,7 @@ export function createCoordinator(session) {
         try {
           const res = await fetch("/api/hand/v2/advice", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: headers(),
             body: JSON.stringify(payload),
             signal: controller ? controller.signal : undefined,
           });

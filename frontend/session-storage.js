@@ -25,7 +25,7 @@ export function validateSchema(data) {
     || !["setup", "ready", "playing", "settling", "ended"].includes(data.phase)) {
     errors.push("phase 非法");
   }
-  if (!Number.isArray(data.seats) || !data.seats.length) errors.push("seats 缺失");
+  if (!Array.isArray(data.seats) || !data.seats.length) errors.push("seats 缺失");
   if (!data.occupants || typeof data.occupants !== "object") errors.push("occupants 缺失");
   if (data.currentHand !== null && (typeof data.currentHand !== "object" || data.currentHand === undefined)) {
     errors.push("currentHand 非法");

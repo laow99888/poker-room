@@ -14,7 +14,7 @@ const { createSession, chipsFromBB, chipsToBBText, automaticNextPositions,
         heroSeatOf, DomainError } = S;
 
 // F1：连续六人桌
-function f1() {
+function f1(overrides = {}) {
   return createSession({
     capacity: 6,
     entries: [1, 2, 3, 4, 5, 6].map((n) => ({ seatId: n, chips: 10000, name: `P${n}` })),
@@ -23,6 +23,7 @@ function f1() {
     blindLevel: { sb: 100, bb: 200, anteEach: 0 },
     learningEnabled: false,
     icm: { scope: "off", payouts: [] },
+    ...overrides,
   });
 }
 
@@ -402,4 +403,55 @@ test("M-09 建桌非法输入：重复座位/重复 occupant/英雄空座全部�
   assert.throws(() => createSession({
     ...base, entries: [{ seatId: 1, chips: 0 }, { seatId: 2, chips: 10000 }],
   }), /起始筹码/);
+});
+
+/* -------------------------------------------------- A-04 学习记录任务队列 */
+
+test("A-04 开启学习且 complete 手结算后入队原 payload；manual_close 不入队", () => {
+  const on = f1({ learningEnabled: true });
+  setHeroCards(on, ["As", "Ad"]);
+  on.phase = "playing";                    // 领域层外由 UI 在首次 view 验证后推进
+  for (const seat of [3, 4, 5, 6, 1]) pushOp(on, { op: "action", type: "fold", seatId: seat });
+  enterSettling(on);
+  const completeHandId = on.currentHand.handId;
+  settleAll(on, { 1: 9900, 2: 10100, 3: 10000, 4: 10000, 5: 10000, 6: 10000 });
+  const s2 = completeCommit(on, beginCommit(on), null);
+  assert.equal(Object.keys(s2.learningJobs).length, 1);
+  const job = s2.learningJobs[completeHandId];
+  assert.equal(job.status, "pending");
+  assert.equal(job.payload.hand_id, completeHandId);
+  assert.equal(job.payload.protocol_version, 2);
+  assert.equal(job.payload.context.learning_enabled, true);
+  assert.deepEqual(job.payload.hero_cards, ["As", "Ad"]);
+  assert.equal(job.payload.ops.length, 5);
+
+  // manual_close：学习开着也不入队（牌谱不完整不能接续画像）
+  const on2 = f1({ learningEnabled: true });
+  setHeroCards(on2, ["As", "Ad"]);
+  on2.phase = "playing";
+  for (const seat of [3, 4, 5, 6, 1]) pushOp(on2, { op: "action", type: "fold", seatId: seat });
+  manualCloseHand(on2, "有人误亮牌，现场裁定重发筹码");
+  settleAll(on2, { 1: 9900, 2: 10100, 3: 10000, 4: 10000, 5: 10000, 6: 10000 });
+  const s3 = completeCommit(on2, beginCommit(on2), null);
+  assert.deepEqual(s3.learningJobs, {});
+});
+
+test("A-05 markLearningJob：成功即清除、失败保留原 payload 供重试", () => {
+  const on = f1({ learningEnabled: true });
+  setHeroCards(on, ["As", "Ad"]);
+  on.phase = "playing";                    // 领域层外由 UI 在首次 view 验证后推进
+  for (const seat of [3, 4, 5, 6, 1]) pushOp(on, { op: "action", type: "fold", seatId: seat });
+  enterSettling(on);
+  const hid = on.currentHand.handId;
+  settleAll(on, { 1: 9900, 2: 10100, 3: 10000, 4: 10000, 5: 10000, 6: 10000 });
+  const s2 = completeCommit(on, beginCommit(on), null);
+  const original = JSON.stringify(s2.learningJobs[hid].payload);
+  S.markLearningJob(s2, hid, "failed", "HTTP 503");
+  assert.equal(s2.learningJobs[hid].status, "failed");
+  assert.equal(s2.learningJobs[hid].lastError, "HTTP 503");
+  assert.equal(JSON.stringify(s2.learningJobs[hid].payload), original);  // 重试用原 payload
+  assert.equal(S.pendingLearningJobs(s2).length, 1);
+  S.markLearningJob(s2, hid, "success");
+  assert.equal(s2.learningJobs[hid], undefined);
+  assert.deepEqual(S.pendingLearningJobs(s2), []);
 });

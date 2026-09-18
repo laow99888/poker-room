@@ -365,6 +365,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   .mini-card { font-size: 11px; padding: 2px 4px; }
   .bet-chip { font-size: 11px; padding: 2px 7px; }
   #table-logo { font-size: 38px; }
+  #table-center { top: 55%; width: min(220px, 62%); }
+  .pot-line { font-size: 12px; }
 }
 
 /* ================= 锦标赛连续牌桌（5.1–5.7） ================= */
@@ -385,8 +387,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 
 /* 布局：进行中 左牌桌弹性 + 右操作列固定 */
 main#layout { grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "table right"; }
+main#layout[data-phase="setup"] { grid-template-columns: minmax(0, 720px); grid-template-areas: "right"; justify-content: center; }
+main#layout[data-phase="setup"] #col-table { display: none; }
 main#layout #col-table { grid-area: table; }
 main#layout #col-side { grid-area: right; display: grid; gap: 18px; align-content: start; }
+main#layout #col-table[hidden], main#layout #col-side[hidden] { display: none; }
 
 .table-caption {
   display: flex; align-items: baseline; gap: 12px; justify-content: space-between;
@@ -498,7 +503,15 @@ details.panel[open] > summary.group-title::after { content: "－"; }
   .mini-card { font-size: 11px; padding: 2px 4px; }
   .bet-chip { font-size: 11px; padding: 2px 7px; }
   #table-logo { font-size: 38px; }
+  #table-center { top: 55%; width: min(220px, 62%); }
+  .pot-line { font-size: 12px; }
   main#layout { grid-template-columns: minmax(0, 1fr); }
   main#layout > .col, main#layout .panel { min-width: 0; }
   #cfg-payouts { flex: 1 1 160px; width: auto; }
 }
+
+[hidden] { display: none !important; }
+
+/* 学习记录状态（A-04） */
+.learning-status { color: var(--gold, #d8b45a); }
+.learning-status .ghost-btn { min-height: 26px; padding: 1px 10px; margin-left: 6px; }

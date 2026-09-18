@@ -293,6 +293,56 @@ def hand_advice_v2_api(payload: dict, request: Request):
     return _v2_hand(payload, request, want_advice=True)
 
 
+@app.post("/api/hand/v2/record")
+def hand_record_v2_api(payload: dict, request: Request):
+    """A-04/A-05：学习开启时按 v2 上下文记录一手完整牌谱。
+
+    与 legacy /api/stats/record 同库（按 hand_id 幂等）；manual_close 与
+    关闭学习的请求不产生样本。牌谱必须真实打完（hand_over）。"""
+    if payload.get("protocol_version") != 2:
+        raise HTTPException(400, "protocol_version 必须为 2")
+    context = _context_of(payload)
+    if not context.get("learning_enabled"):
+        raise HTTPException(409, "学习记录未启用")
+    try:
+        plan = table_context.engine_plan(context)
+        state, plan, _dealt = table_replay_context(
+            context, payload.get("hero_cards") or [], payload.get("ops") or [])
+    except TableError as exc:
+        raise HTTPException(400, str(exc))
+    if state.status:
+        raise HTTPException(400, "只能记录已经打完的完整牌谱")
+
+    seat_pos = {sid: plan["range_positions"][i]
+                for sid, i in plan["seat_to_index"].items()
+                if plan["range_positions"][i]}
+    opp_seat = {p["occupant_id"]: p["seat_id"] for p in context["participants"]}
+    profile_names = context.get("profile_names") or {}
+    names = {seat_pos[opp_seat[oid]]: str(name)
+             for oid, name in profile_names.items()
+             if oid in opp_seat and opp_seat[oid] in seat_pos}
+    cfg = {"sb": context["blinds"]["sb"], "bb": context["blinds"]["bb"],
+           "ante": context["blinds"]["ante_each"],
+           "player_count": plan["player_count"]}
+    ops_legacy = []
+    for op in payload.get("ops") or []:
+        if op.get("op") == "action" and "seat_id" in op:
+            if op["seat_id"] not in seat_pos:
+                raise HTTPException(400, f"座位 {op['seat_id']} 不在本手牌谱中")
+            ops_legacy.append({**op, "seat": seat_pos[op["seat_id"]]})
+        else:
+            ops_legacy.append(op)
+    try:
+        intel = decision.player_intel(state)
+        result = opponents.record_hand(
+            cfg, ops_legacy, names, intel,
+            hero_index=plan["seat_to_index"][plan["hero_seat_id"]],
+            hand_id=payload.get("hand_id"), uid=_player_id(request))
+    except TableError as exc:
+        raise HTTPException(400, str(exc))
+    return {"recorded": result}
+
+
 _FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/", StaticFiles(directory=str(_FRONTEND), html=True), name="static")
 

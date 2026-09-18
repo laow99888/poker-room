@@ -763,6 +763,22 @@ export function completeCommit(session, tx, prepared) {
     positionSource: next.positions.source,
     settledAt: new Date().toISOString(),
   };
+  // C-学习/A-04：开启学习且牌谱完整（真实摊牌走完）才创建记录任务；
+  // manual_close 牌谱不完整，不能接续对手画像（R03）。
+  if (hand.context.learning_enabled && hand.recordQuality === "complete") {
+    next.learningJobs ??= {};
+    next.learningJobs[hand.handId] = {
+      payload: {
+        protocol_version: 2,
+        hand_id: hand.handId,
+        context: clone(hand.context),
+        hero_cards: clone(hand.heroCards),
+        ops: clone(hand.ops),
+      },
+      status: "pending",
+      lastError: null,
+    };
+  }
   next.recentHands.push(summary);
   if (next.recentHands.length > 100) next.recentHands.shift();
 
@@ -842,6 +858,26 @@ export function completeCommit(session, tx, prepared) {
 }
 
 /* -------------------------------------------------------------- 辅助校验 */
+
+// A-04/A-05：学习记录任务的查询与状态回写。发送方（app 层）只负责
+// fetch；重试永远用入队时的原 payload（契约：异步重试只能用这一份）。
+export function pendingLearningJobs(session) {
+  return Object.entries(session.learningJobs || {})
+    .filter(([, job]) => job.status !== "success")
+    .map(([handId, job]) => ({ handId, payload: job.payload, status: job.status,
+                               lastError: job.lastError }));
+}
+
+export function markLearningJob(session, handId, status, lastError = null) {
+  const job = session.learningJobs?.[handId];
+  if (!job) return;
+  if (status === "success") {
+    delete session.learningJobs[handId];
+  } else {
+    job.status = status;
+    job.lastError = lastError;
+  }
+}
 
 function requirePhase(session, phases) {
   if (!phases.includes(session.phase)) {

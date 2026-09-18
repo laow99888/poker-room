@@ -110,20 +110,29 @@ check("08", "22=5 < 99=9 < TT=10 < AA=20",
       and _chen_score((("T", "s"), ("T", "h"))) == 10
       and _chen_score((("A", "s"), ("A", "h"))) == 20)
 
-# 09/10/13/26/28 前端纪律（源码落点）
+# 09/10/13/26/28 前端纪律（源码落点）。注：app.js 已重写为锦标赛 v2
+# （docs/plans/tournament-session/），旧版单手 revision 守卫迁移到
+# request-coordinator.js（S-03/S04，测试在 coordinator.test.mjs）。
 appjs = open("frontend/app.js", encoding="utf-8").read()
-guard = open("tests/frontend/async-guard.test.mjs", encoding="utf-8").read()
+coordjs = open("frontend/request-coordinator.js", encoding="utf-8").read()
+coordtest = open("tests/frontend/coordinator.test.mjs", encoding="utf-8").read()
 check("09", "sameHand 契约 + revision 守卫（测试与源码在位）",
       "typeof before === \"string\"" in open("frontend/logic.js", encoding="utf-8").read()
-      and "36-A" in guard)
-check("10", "仅回滚待确认一步（无连环 pop）",
-      "retries < 3" not in appjs and "state.unconfirmed" in appjs)
-check("13", "resetHandState 统一迁移 + 推进 revision",
-      "function resetHandState" in appjs and "state.revision += 1" in appjs)
-check("26", "错误优先渲染 + retry 按钮",
-      'if (state.error) {' in appjs and 'data-action="retry"' in appjs)
-check("28", "清底牌统一 resetHandState 并保留另一张",
-      'case "hero-pick":' in appjs and "kept" in appjs)
+      and "stillCurrent" in coordjs
+      and "stale" in coordtest)
+check("10", "动作先验证后落地（onAccept 才 pushOp，无猜测回滚）",
+      "retries < 3" not in appjs
+      and "pushOp(rt.session, op)" in appjs
+      and appjs.index("onAccept(body)") < appjs.index("pushOp(rt.session, op)"))
+sessjs = open("frontend/session.js", encoding="utf-8").read()
+check("13", "撤销统一走 undoLastOp 并推进 revision（领域层）",
+      "export function undoLastOp" in sessjs
+      and "bumpRevision(session)" in sessjs)
+check("26", "view 失败错误可见渲染 + 可撤销重试入口",
+      "局面更新失败" in appjs and "function onUndo" in appjs)
+check("28", "底牌两连选自动落定、重录统一清空",
+      ".slice(-2)" in appjs and "setHeroCards(rt.session, rt.heroPicks)" in appjs
+      and "function onReplayHand" in appjs)
 
 # 11/38 reset 令牌门槛
 check("11", "reset 令牌门槛保留", "X-Admin-Token" in open("backend/app.py", encoding="utf-8").read())
@@ -143,10 +152,11 @@ r14b = opponents.record_hand(cfg6, ops_fold, {}, intel4, hand_id="new-id", uid="
 check("14", "810 手后同 id 仍判重、新 id 各计", r14["recorded"] is False
       and r14b["recorded"] is True)
 
-# 15 转义
-check("15", "名字输出转义（输入框+建议面板）",
-      "AppLogic.escapeHtml(opponentName(p))" in appjs
-      and "AppLogic.escapeHtml(o.name)" in appjs)
+# 15/30 转义（v2 落点：esc() 覆盖建桌/结算/成员等全部 innerHTML 拼接的用户输入）
+check("15", "名字输出转义（esc 覆盖代号渲染）",
+      "function esc(v)" in appjs
+      and 'esc(occ?.name || "")' in appjs
+      and "esc(occ.profileName" in appjs)
 
 # 16 非法输入 4xx
 bad1 = c.post("/api/equity", json={"hero": ["As"], "villains": [], "board": []})
@@ -186,7 +196,8 @@ r21 = solve_river(BOARD5, [("Ks", "Kh")], er("AA") + er("QQ")[:4],
                   money=(1, 49, 0, 47, 0), buckets=1, iterations=100, allow_raise=False)
 check("21", "无加注权无 raise", "raise" not in r21["root_labels"])
 
-check("22", "跨手守卫行为测试在库", "40-C" in guard and "36-A" in guard)
+check("22", "跨手守卫行为测试在库（coordinator stale 丢弃）",
+      "旧正文必须以 stale 丢弃" in coordtest and "stillCurrent" in coordjs)
 check("23", "烧牌不禁选（taken 仅已知观察）",
       v5c["taken"] == sorted(["As", "Ad", "8c", "Kh", "Qd"]))
 
@@ -199,17 +210,19 @@ adv34 = c.post("/api/hand/advice", json={"config": {"sb": 100, "bb": 200, "ante"
 check("24", "短码可争层 3300 / 30.30%", adv34["required_eq"] == 30.3
       and sum(l["amount"] for l in adv34["side_pots"]) == 3300)
 
-check("25", "revision 等长分支守卫（行为级）", "36-A" in guard)
+check("25", "revision 等长分支守卫（行为级）",
+      "旧 advice 后到不覆盖新分支" in coordtest)
 
 # 27/37 身份链路
 check("27", "advice 携带 X-Player-Id（画像参与建议）",
-      '"Content-Type": "application/json", ...statsHeaders()' in appjs)
+      '"Content-Type": "application/json", ...statsHeaders()' in appjs
+      or ('X-Player-Id' in appjs and 'playerHeaders()' in appjs))
 
-# 29 首手 id
-check("29", "首手即有 handId", "handId: AppLogic.newHandId()" in appjs)
+# 29 首手 id（v2：建桌快照即带 crypto.randomUUID 派生 handId）
+check("29", "首手即有 handId", 'handId: newId("h")' in sessjs)
 
-# 30 建议面板转义
-check("30", "renderAdvice 名字转义", "escapeHtml(o.name)" in appjs)
+# 30 建议面板转义（v2 推演区混合策略标签经 esc）
+check("30", "renderAdvice 文本经转义", "esc(m.label)" in appjs)
 
 # 31 保留前缀降级
 opponents.record_hand(cfg6, ops_fold, {"BB": "_pool"}, intel4, uid="v31")
@@ -278,3 +291,7 @@ for no, desc, ok in results:
 print()
 print("共 " + str(len(results)) + " 项：" +
       ("全部 PASS" if not fails else str(len(fails)) + " 项 FAIL: " + str([x[0] for x in fails])))
+# 审查 43：审计失败必须非零退出，供 CI/脚本可靠判定
+
+sys.exit(1 if fails else 0)
+

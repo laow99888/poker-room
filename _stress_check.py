@@ -87,6 +87,7 @@ def t_concurrent_consistency():
         for r, _ in out:
             check("A1 状态 200", r.status_code == 200, r.status_code)
             body = r.json()
+            body.get("advice", {}).get("equity", {}).pop("elapsedMs", None)
             if ref is None:
                 ref = body
             else:
@@ -148,21 +149,27 @@ def t_race_sequence():
     plan = [("UTG", "call"), ("HJ", "call"), ("CO", "call"),
             ("BTN", "raise"),  # 英雄加注
             ("SB", "fold"), ("BB", "fold")]
-    expected_actor = ["BTN", "BTN", "BTN", "SB", "BB"]
+    expected_actor = ["HJ", "CO", "BTN", "SB", "BB", "UTG"]  # BB fold 后待发翻牌，轮 UTG
     for i, (seat, kind) in enumerate(plan):
         op = {"op": "action", "seat": seat,
               "type": kind, **({"to": 900} if kind == "raise" else {})}
         ops.append(op)
+        # actor 用 view 轮询（任何回合都 200）；advice 只在轮到英雄时 200
+        v = requests.post(BASE + "/api/hand/view",
+                          json={"config": base_config(), "hero_pos": "BTN",
+                                "hero_cards": hero, "ops": ops}, timeout=15)
+        ok = v.status_code == 200 and v.json()["actor"] == expected_actor[i]
+        check("A3 actor 随 ops 推进", ok,
+              f"step{i}: {v.status_code} actor={v.json().get('actor') if v.status_code==200 else '-'}")
         r = requests.post(BASE + "/api/hand/advice",
                           json={"config": base_config(), "hero_pos": "BTN",
                                 "hero_cards": hero, "ops": ops,
                                 "iterations": 3000, "seed": i}, timeout=30)
-        if i < 4:
-            ok = r.status_code == 200 and r.json()["actor"] == expected_actor[i]
-            check("A3 actor 随 ops 推进", ok,
-                  f"step{i}: {r.status_code} actor={r.json().get('actor') if r.status_code==200 else '-'}")
-        else:
-            # 英雄加注 900 后 SB/BB 行动时，轮不到英雄 → 稳定 400
+        if i == 2:
+            # UTG/HJ/CO 平跟后轮到英雄 → advice 可用
+            check("A3 轮到英雄时 advice 200", r.status_code == 200, r.status_code)
+        elif i < 5:
+            # 其余回合英雄未行动 → 稳定 400 且不得 5xx
             check("A3 未轮到英雄时稳定 400", r.status_code == 400, r.status_code)
     # 英雄行动后补发翻牌 → 轮到 SB，此时英雄请求建议应 400"还没轮到你"
     ops.append({"op": "board", "cards": ["Ks", "7d", "2c"]})
@@ -269,7 +276,7 @@ def t_record_idempotent():
            {"op": "board", "cards": ["4s"]}]
     hand = {"config": base_config(), "hero_pos": "BTN",
             "hero_cards": ["Ah", "Ad"], "ops": ops, "names": {"BB": "压测对手"},
-            "hand_id": "stress-hand-0001"}
+            "hand_id": "stress-hand-0001", "learning_enabled": True}
     r = requests.get(BASE + "/api/stats/summary/all", headers=uid, timeout=10)
     before = r.json()
     codes = []

@@ -12,6 +12,7 @@ import {
   emptyNextHandDraft, applyRosterEdit, applyDraftPositions, setDraftBlinds,
   previewNextPositions, automaticNextPositions, rolesForSeat,
   heroSeatOf, rangePositionFor, buildHandContext, DomainError,
+  pendingLearningJobs, markLearningJob,
 } from "./session.js";
 import * as Store from "./session-storage.js";
 import { createCoordinator } from "./request-coordinator.js";
@@ -60,10 +61,11 @@ function init() {
   const loaded = Store.loadSession();
   if (loaded.status === "ok") {
     rt.session = loaded.session;
-    rt.coord = createCoordinator(rt.session);
+    rt.coord = createCoordinator(rt.session, playerHeaders);
     rt.unit = rt.session.displayUnit || "bb";
     resyncAll();
     resumeIfPossible();
+    syncLearningJobs();     // A-04：恢复页面时补发未完成的学习记录
     return;
   }
   showSetupWizard(loaded);
@@ -123,9 +125,8 @@ function downloadRaw(text) {
 function renderSetupSeats() {
   const capacity = Number($("#tg-capacity").value) || 6;
   const wrap = $("#tg-seats");
-  const next = new Map();
-  for (const [k, v] of rt.setup.occupied) if (k <= capacity) next.set(k, v);
-  rt.setup.occupied = next;
+  const next = rt.setup.occupied;
+  for (const k of [...next.keys()]) if (k > capacity) next.delete(k);
   const rows = [];
   for (let sid = 1; sid <= capacity; sid++) {
     const occ = next.get(sid);
@@ -169,10 +170,11 @@ function renderSetupSeats() {
       const cur = next.get(sid);
       if (cur) cur.name = e.target.value;
     });
+    const KEY_BY_ROLE = { hero: "heroSeatId", btn: "buttonSeatId", sb: "sbSeatId", bb: "bbSeatId" };
     for (const role of ["hero", "btn", "sb", "bb"]) {
       row.querySelector(`[data-role="${role}"]`).addEventListener("click", () => {
         if (!next.has(sid)) return;
-        const key = `${role}SeatId`;
+        const key = KEY_BY_ROLE[role];
         rt.setup[key] = rt.setup[key] === sid ? null : sid;
         wrap.querySelectorAll(".tg-seat-row").forEach((r) => markSeatTags(r, Number(r.dataset.seat)));
       });
@@ -262,7 +264,7 @@ async function onConfirmTable() {
     const session = rt.setupPreview || createSession(collectSetup());
     await prepareContext(session, session.currentHand.handId, 1);   // A03：后端验证后才开始
     rt.session = session;
-    rt.coord = createCoordinator(session);
+    rt.coord = createCoordinator(session, playerHeaders);
     rt.unit = "bb";
     persist();
     renderAll();
@@ -295,6 +297,72 @@ async function prepareRaw(body) {
 }
 
 /* ------------------------------------------------------------- 保存状态 */
+
+function playerHeaders() {
+  // 27/A-04：匿名命名空间随头发送（与 logic.js 的 AppLogic.playerId 同一
+  // localStorage 键 paishi_uid；本页不加载 logic.js，这里内联同规则）。
+  let uid = "local";
+  try {
+    uid = localStorage.getItem("paishi_uid") || "local";
+    if (uid === "local") {
+      uid = (globalThis.crypto && globalThis.crypto.randomUUID)
+        ? globalThis.crypto.randomUUID() : `u-${Date.now()}`;
+      localStorage.setItem("paishi_uid", uid);
+    }
+  } catch (_e) { /* 隐私模式等：回退 local */ }
+  return { "X-Player-Id": uid };
+}
+
+let learningSyncing = false;
+
+// A-04/A-05：补发学习记录。用入队原 payload；关闭学习时暂停（契约：
+// 重新开启后才允许重试）；409 保留任务不标失败。
+async function syncLearningJobs() {
+  if (!rt.session || learningSyncing) return;
+  const jobs = pendingLearningJobs(rt.session);
+  renderLearningStatus();
+  if (!jobs.length || !rt.session.learningEnabled) return;
+  learningSyncing = true;
+  for (const job of jobs) {
+    try {
+      const res = await fetch("/api/hand/v2/record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...playerHeaders() },
+        body: JSON.stringify(job.payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) continue;      // 学习已关闭：暂停，保留任务
+      if (res.ok && data.recorded) {
+        markLearningJob(rt.session, job.handId, "success");
+      } else {
+        markLearningJob(rt.session, job.handId, "failed",
+          data.detail || `HTTP ${res.status}`);
+      }
+    } catch (e) {
+      markLearningJob(rt.session, job.handId, "failed", e.message);
+    }
+  }
+  learningSyncing = false;
+  persist();
+  renderLearningStatus();
+}
+
+function renderLearningStatus() {
+  const el = $("#learning-status");
+  if (!el || !rt.session) return;
+  const jobs = pendingLearningJobs(rt.session);
+  const paused = jobs.length && !rt.session.learningEnabled;
+  el.hidden = !jobs.length;
+  el.innerHTML = jobs.length
+    ? `${paused ? "有学习记录待发送（学习已关闭）"
+        : jobs.some((j) => j.status === "failed")
+        ? "学习记录发送失败，可重试"
+        : "正在发送学习记录…"}
+      ${paused ? "" : `<button type="button" class="ghost-btn" data-action="retry-learning">重试</button>`}`
+    : "";
+  const btn = el.querySelector('[data-action="retry-learning"]');
+  if (btn) btn.addEventListener("click", () => syncLearningJobs());
+}
 
 function persist() {
   if (!rt.session) return;
@@ -633,6 +701,7 @@ async function commitSettlement(area) {
     rt.coord.resync(committed);
     persist();                                            // S02.7：成功才渲染新手
     renderAll();
+    syncLearningJobs();                                   // A-04：本手学习记录
     if (rt.session.phase === "ready") {
       setStatus(`第 ${rt.session.currentHand.handNumber} 手开始，请选择本手底牌。`);
     }
@@ -775,6 +844,7 @@ function renderSessionBar() {
     : `本桌第 ${s.handNumber} 手 · ${phaseText} · 你：${seat ?? "—"}号座/${esc(roleLabel)} · ` +
       `盲注 ${s.blindLevel.sb}/${s.blindLevel.bb} · 每人前注 ${s.blindLevel.anteEach} · ` +
       `${fmtChips(occ?.confirmedChips ?? 0)} 筹码`;
+  renderLearningStatus();
   const slot = $("#bar-main-slot");
   slot.innerHTML = "";
   if (s.phase === "playing" || s.phase === "ready") {
@@ -823,8 +893,8 @@ function renderTableCaption() {
 }
 
 function seatXY(i, n) {
-  const x = 50 + 40 * Math.sin((i / n) * 2 * Math.PI);
-  const y = 50 - 42 * Math.cos((i / n) * 2 * Math.PI);
+  const x = 50 + 37 * Math.sin((i / n) * 2 * Math.PI);
+  const y = 50 - 40 * Math.cos((i / n) * 2 * Math.PI);
   return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
 }
 
@@ -1039,9 +1109,7 @@ function renderActionButtons(isHero) {
   const need = nextBoardNeed();
   html += `<button type="button" class="ghost-btn" data-act="deal-board" ${pending || !need || rt.gridMode === "board" ? "disabled" : ""}>发${STREET_LABEL[view.street] || ""}（${need} 张）</button>`;
   html += `<button type="button" class="ghost-btn" data-act="undo" ${pending || !s.currentHand.ops.length ? "disabled" : ""}>撤销上一步</button>`;
-  if (!isHero) {
-    html += `<button type="button" class="ghost-btn" data-act="manual-close" ${dis}>结束本手，手动核对余额</button>`;
-  }
+  html += `<button type="button" class="ghost-btn" data-act="manual-close" ${dis}>结束本手，手动核对余额</button>`;
   area.innerHTML = html;
   for (const el of area.querySelectorAll("[data-act]")) {
     el.addEventListener("click", () => onActButton(el.dataset.act));
