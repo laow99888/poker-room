@@ -26,7 +26,7 @@ def _action_class(action: str) -> str:
 
 
 def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos,
-                      board, recommendation) -> dict:
+                      board, recommendation, nominal_bb=None) -> dict:
     """第三层：翻牌/转牌/河牌 CFR 均衡参考（单挑限定；降级时不影响主建议）。
 
     河牌为精确单街解；翻牌/转牌把剩余牌 rollout 成期望胜率作终值（近似，
@@ -45,7 +45,7 @@ def _cfr_street_block(state, hero_index, hero_cards, hero_combos, villain_combos
         # 03：金额口径三路分离——累计投入（含前街）/死钱/身后剩余筹码。
         # stack_bb 不能再拿"身后剩余"去减"已在池的钱"（老代码重复扣减，
         # 全下额度失真）。PokerKit 的 stack 是身后筹码，start-stack = 累计投入。
-        bb = state.blinds_or_straddles[1]
+        bb = nominal_bb if nominal_bb is not None else state.blinds_or_straddles[1]
         if bb <= 0:
             return {"supported": False, "reason": "盲注配置异常"}
         opp = live[0]
@@ -327,7 +327,7 @@ def _mix_no_bet(eff, spr, opponent_count):
 
 
 def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponent_count,
-                          range_adv_val=None, eff_override=None):
+                          range_adv_val=None, eff_override=None, nominal_bb=None):
     """把权益与底池赔率翻译成带概率的行动建议。"""
     # 24/35：优先消费分层加权权益（与 EV 同源），平局半分的高估只在
     # 无分层结果时兜底；多家平分时它会失真
@@ -335,7 +335,7 @@ def _build_recommendation(state, hero_index, eq, to_call, pot, required, opponen
         else eq.get("equity", eq["win"] + eq["tie"] / 2)
     eff_stack = state.get_effective_stack(hero_index)
     spr = round(eff_stack / pot, 1) if pot > 0 else None
-    bb = state.blinds_or_straddles[1]
+    bb = nominal_bb if nominal_bb is not None else state.blinds_or_straddles[1]
     min_to = state.min_completion_betting_or_raising_to_amount
     max_to = state.max_completion_betting_or_raising_to_amount
 
@@ -481,19 +481,19 @@ def _side_pots(state, hero_index: int, to_call: int):
 
 
 def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
-               uid="local", learning_enabled: bool = False) -> dict:
+               uid="local", learning_enabled: bool = False, plan=None) -> dict:
     """计算英雄当前决策建议（必须轮到英雄行动）。uid 用于隔离对手档案。
 
     learning_enabled=False（默认）时只读基础位置范围+本手动作推断，
     不读取具名档案与共享人群统计（契约 A04）。
     """
+    positions = plan["range_positions"] if plan else positions_for(state.player_count)
     if state.status is False:
         raise TableError("这手牌已经结束")
     if state.actor_index != hero_index:
-        positions = positions_for(state.player_count)
-        raise TableError(f"还没轮到你行动（当前轮到 {positions[state.actor_index]}）")
+        actor = positions[state.actor_index] if state.actor_index is not None else "发公共牌"
+        raise TableError(f"还没轮到你行动（当前轮到 {actor}）")
 
-    positions = positions_for(state.player_count)
     intel = player_intel(state)
     board = [repr(c) for street in state.board_cards for c in street]
     hero_cards = [repr(c) for c in tuple(state.get_down_cards(hero_index))]
@@ -530,6 +530,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
                 combos, keep_frac = _narrow_by_strength(combos, scale)
             range_source = f"人群统计（{pos} 实际开牌率 {pool['open_pct']}%，样本 {pool['hands']} 手）"
         opponents.append({
+            "seat_id": plan["index_to_seat"][i] if plan else None,
             "pos": pos,
             "name": name or None,
             "stats": stats,
@@ -575,6 +576,7 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
         ev_call += layer_eq / 100.0 * layer["amount"]
         pot_rows.append({"amount": layer["amount"],
                          "seats": [positions[i] for i in layer["seats"]],
+                         "seat_ids": [plan["index_to_seat"][i] for i in layer["seats"]] if plan else [],
                          "equity": layer_eq})
     ev_call = round(ev_call, 2)
     equity_share = round(eff, 2)
@@ -583,10 +585,10 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
     weighted_eff = (round(100.0 * (ev_call + to_call_eff) / total_amounts, 2)
                     if total_amounts > 0 else eff)
 
-    bb = state.blinds_or_straddles[1]
+    bb = plan["big_blind_amount"] if plan else state.blinds_or_straddles[1]
     ante = state.antes[0]
     hero_stack = state.stacks[hero_index]
-    orbit_cost = state.blinds_or_straddles[0] + bb + ante * state.player_count
+    orbit_cost = sum(state.blinds_or_straddles) + ante * state.player_count
 
     # 第一层算法：牌面结构 + 范围优势/坚果优势
     texture = textures.analyze_board(board) if board else None
@@ -607,10 +609,10 @@ def advice_for(state, hero_index: int, iterations: int, seed=None, names=None,
     recommendation = _build_recommendation(
         state, hero_index, eq, to_call, pot, required, len(opponents),
         range_adv_val=(range_adv["adv"] if range_adv else None),
-        eff_override=weighted_eff)
+        eff_override=weighted_eff, nominal_bb=bb)
 
     cfr_block = _cfr_street_block(state, hero_index, hero_cards, hero_combos,
-                                 villain_merged, board, recommendation)
+                                 villain_merged, board, recommendation, nominal_bb=bb)
 
     return {
         "equity": eq,

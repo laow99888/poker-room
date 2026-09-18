@@ -1,0 +1,2964 @@
+{
+  "generated_at": "2026-09-18T19:38:46.780916+00:00",
+  "purpose": "Capture observed backend behavior; this is evidence, not a passing acceptance suite.",
+  "data_isolation": "get_stats/get_pool mocked; _load/_save forbidden; no record/reset endpoint used",
+  "short_tables": [
+    {
+      "count": 2,
+      "expected": "Initial view, first legal fold, and hero advice all succeed for 2-9 participants.",
+      "initial": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p2",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 2,
+            "small_blind_seat_id": 2,
+            "big_blind_seat_id": 1,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 200,
+        "response": {
+          "street": "preflop",
+          "board": [],
+          "taken": [
+            "Ad",
+            "As"
+          ],
+          "pot": 300,
+          "seats": [
+            {
+              "seat_id": 1,
+              "occupant_id": "p1",
+              "range_position": "BB",
+              "roles": [
+                "BB"
+              ],
+              "stack": 9800,
+              "bet": 200,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "range_position": "BTN",
+              "roles": [
+                "BTN",
+                "SB"
+              ],
+              "stack": 9900,
+              "bet": 100,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": true,
+              "starting_chips": 10000
+            }
+          ],
+          "actor_seat_id": 2,
+          "hand_over": false,
+          "hero": {
+            "seat_id": 2,
+            "occupant_id": "p2",
+            "cards": [
+              "As",
+              "Ad"
+            ],
+            "stack": 9900
+          },
+          "settlement_preview": {
+            "status": "not_ready",
+            "reason": "incomplete_record",
+            "rows": [
+              {
+                "seat_id": 1,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 2,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              }
+            ]
+          },
+          "to_call": 100,
+          "min_raise_to": 400,
+          "max_raise_to": 10000,
+          "hand_id": "review-probe-hand"
+        }
+      },
+      "action": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p2",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 2,
+            "small_blind_seat_id": 2,
+            "big_blind_seat_id": 1,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [
+            {
+              "op": "action",
+              "seat_id": 2,
+              "type": "fold"
+            }
+          ],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      },
+      "advice": {
+        "path": "/api/hand/v2/advice",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p2",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 2,
+            "small_blind_seat_id": 2,
+            "big_blind_seat_id": 1,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      }
+    },
+    {
+      "count": 3,
+      "expected": "Initial view, first legal fold, and hero advice all succeed for 2-9 participants.",
+      "initial": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 3,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 200,
+        "response": {
+          "street": "preflop",
+          "board": [],
+          "taken": [
+            "Ad",
+            "As"
+          ],
+          "pot": 300,
+          "seats": [
+            {
+              "seat_id": 1,
+              "occupant_id": "p1",
+              "range_position": "SB",
+              "roles": [
+                "SB"
+              ],
+              "stack": 9900,
+              "bet": 100,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "range_position": "BB",
+              "roles": [
+                "BB"
+              ],
+              "stack": 9800,
+              "bet": 200,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 3,
+              "occupant_id": "p3",
+              "range_position": "BTN",
+              "roles": [
+                "BTN"
+              ],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": true,
+              "starting_chips": 10000
+            }
+          ],
+          "actor_seat_id": 3,
+          "hand_over": false,
+          "hero": {
+            "seat_id": 3,
+            "occupant_id": "p3",
+            "cards": [
+              "As",
+              "Ad"
+            ],
+            "stack": 10000
+          },
+          "settlement_preview": {
+            "status": "not_ready",
+            "reason": "incomplete_record",
+            "rows": [
+              {
+                "seat_id": 1,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 2,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 3,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              }
+            ]
+          },
+          "to_call": 200,
+          "min_raise_to": 400,
+          "max_raise_to": 10000,
+          "hand_id": "review-probe-hand"
+        }
+      },
+      "action": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 3,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [
+            {
+              "op": "action",
+              "seat_id": 3,
+              "type": "fold"
+            }
+          ],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      },
+      "advice": {
+        "path": "/api/hand/v2/advice",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 3,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      }
+    },
+    {
+      "count": 4,
+      "expected": "Initial view, first legal fold, and hero advice all succeed for 2-9 participants.",
+      "initial": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 4,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 200,
+        "response": {
+          "street": "preflop",
+          "board": [],
+          "taken": [
+            "Ad",
+            "As"
+          ],
+          "pot": 300,
+          "seats": [
+            {
+              "seat_id": 1,
+              "occupant_id": "p1",
+              "range_position": "SB",
+              "roles": [
+                "SB"
+              ],
+              "stack": 9900,
+              "bet": 100,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "range_position": "BB",
+              "roles": [
+                "BB"
+              ],
+              "stack": 9800,
+              "bet": 200,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 3,
+              "occupant_id": "p3",
+              "range_position": "CO",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": true,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 4,
+              "occupant_id": "p4",
+              "range_position": "BTN",
+              "roles": [
+                "BTN"
+              ],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            }
+          ],
+          "actor_seat_id": 3,
+          "hand_over": false,
+          "hero": {
+            "seat_id": 3,
+            "occupant_id": "p3",
+            "cards": [
+              "As",
+              "Ad"
+            ],
+            "stack": 10000
+          },
+          "settlement_preview": {
+            "status": "not_ready",
+            "reason": "incomplete_record",
+            "rows": [
+              {
+                "seat_id": 1,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 2,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 3,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 4,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              }
+            ]
+          },
+          "to_call": 200,
+          "min_raise_to": 400,
+          "max_raise_to": 10000,
+          "hand_id": "review-probe-hand"
+        }
+      },
+      "action": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 4,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [
+            {
+              "op": "action",
+              "seat_id": 3,
+              "type": "fold"
+            }
+          ],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      },
+      "advice": {
+        "path": "/api/hand/v2/advice",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 4,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      }
+    },
+    {
+      "count": 5,
+      "expected": "Initial view, first legal fold, and hero advice all succeed for 2-9 participants.",
+      "initial": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 5,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 200,
+        "response": {
+          "street": "preflop",
+          "board": [],
+          "taken": [
+            "Ad",
+            "As"
+          ],
+          "pot": 300,
+          "seats": [
+            {
+              "seat_id": 1,
+              "occupant_id": "p1",
+              "range_position": "SB",
+              "roles": [
+                "SB"
+              ],
+              "stack": 9900,
+              "bet": 100,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "range_position": "BB",
+              "roles": [
+                "BB"
+              ],
+              "stack": 9800,
+              "bet": 200,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 3,
+              "occupant_id": "p3",
+              "range_position": "UTG",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": true,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 4,
+              "occupant_id": "p4",
+              "range_position": "CO",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 5,
+              "occupant_id": "p5",
+              "range_position": "BTN",
+              "roles": [
+                "BTN"
+              ],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            }
+          ],
+          "actor_seat_id": 3,
+          "hand_over": false,
+          "hero": {
+            "seat_id": 3,
+            "occupant_id": "p3",
+            "cards": [
+              "As",
+              "Ad"
+            ],
+            "stack": 10000
+          },
+          "settlement_preview": {
+            "status": "not_ready",
+            "reason": "incomplete_record",
+            "rows": [
+              {
+                "seat_id": 1,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 2,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 3,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 4,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 5,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              }
+            ]
+          },
+          "to_call": 200,
+          "min_raise_to": 400,
+          "max_raise_to": 10000,
+          "hand_id": "review-probe-hand"
+        }
+      },
+      "action": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 5,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [
+            {
+              "op": "action",
+              "seat_id": 3,
+              "type": "fold"
+            }
+          ],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      },
+      "advice": {
+        "path": "/api/hand/v2/advice",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 5,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      }
+    },
+    {
+      "count": 7,
+      "expected": "Initial view, first legal fold, and hero advice all succeed for 2-9 participants.",
+      "initial": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 6,
+                "occupant_id": "p6",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 7,
+                "occupant_id": "p7",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 7,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 200,
+        "response": {
+          "street": "preflop",
+          "board": [],
+          "taken": [
+            "Ad",
+            "As"
+          ],
+          "pot": 300,
+          "seats": [
+            {
+              "seat_id": 1,
+              "occupant_id": "p1",
+              "range_position": "SB",
+              "roles": [
+                "SB"
+              ],
+              "stack": 9900,
+              "bet": 100,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "range_position": "BB",
+              "roles": [
+                "BB"
+              ],
+              "stack": 9800,
+              "bet": 200,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 3,
+              "occupant_id": "p3",
+              "range_position": "UTG",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": true,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 4,
+              "occupant_id": "p4",
+              "range_position": "MP",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 5,
+              "occupant_id": "p5",
+              "range_position": "HJ",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 6,
+              "occupant_id": "p6",
+              "range_position": "CO",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 7,
+              "occupant_id": "p7",
+              "range_position": "BTN",
+              "roles": [
+                "BTN"
+              ],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            }
+          ],
+          "actor_seat_id": 3,
+          "hand_over": false,
+          "hero": {
+            "seat_id": 3,
+            "occupant_id": "p3",
+            "cards": [
+              "As",
+              "Ad"
+            ],
+            "stack": 10000
+          },
+          "settlement_preview": {
+            "status": "not_ready",
+            "reason": "incomplete_record",
+            "rows": [
+              {
+                "seat_id": 1,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 2,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 3,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 4,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 5,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 6,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 7,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              }
+            ]
+          },
+          "to_call": 200,
+          "min_raise_to": 400,
+          "max_raise_to": 10000,
+          "hand_id": "review-probe-hand"
+        }
+      },
+      "action": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 6,
+                "occupant_id": "p6",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 7,
+                "occupant_id": "p7",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 7,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [
+            {
+              "op": "action",
+              "seat_id": 3,
+              "type": "fold"
+            }
+          ],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      },
+      "advice": {
+        "path": "/api/hand/v2/advice",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 6,
+                "occupant_id": "p6",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 7,
+                "occupant_id": "p7",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 7,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 400,
+        "response": {
+          "detail": "桌型仅支持 [6, 8, 9] 人桌"
+        }
+      }
+    }
+  ],
+  "empty_small_blind": {
+    "expected": "Nominal BB is 200; use context range positions and return physical seat identities.",
+    "request_result": {
+      "path": "/api/hand/v2/advice",
+      "request": {
+        "protocol_version": 2,
+        "hand_id": "review-probe-hand",
+        "context": {
+          "session_id": "review-probe-session",
+          "capacity": 9,
+          "hero_occupant_id": "p3",
+          "participants": [
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 3,
+              "occupant_id": "p3",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 4,
+              "occupant_id": "p4",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 5,
+              "occupant_id": "p5",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 6,
+              "occupant_id": "p6",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 7,
+              "occupant_id": "p7",
+              "starting_chips": 10000
+            }
+          ],
+          "button_seat_id": 7,
+          "small_blind_seat_id": null,
+          "big_blind_seat_id": 2,
+          "blinds": {
+            "sb": 100,
+            "bb": 200,
+            "ante_each": 0
+          },
+          "learning_enabled": false,
+          "profile_names": {},
+          "icm": {
+            "scope": "off",
+            "payouts": []
+          }
+        },
+        "hero_cards": [
+          "As",
+          "Ad"
+        ],
+        "ops": [],
+        "iterations": 1000,
+        "seed": 1
+      },
+      "status": 200,
+      "response": {
+        "street": "preflop",
+        "board": [],
+        "taken": [
+          "Ad",
+          "As"
+        ],
+        "pot": 200,
+        "seats": [
+          {
+            "seat_id": 2,
+            "occupant_id": "p2",
+            "range_position": "BB",
+            "roles": [
+              "BB"
+            ],
+            "stack": 9800,
+            "bet": 200,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 3,
+            "occupant_id": "p3",
+            "range_position": "UTG",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": true,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 4,
+            "occupant_id": "p4",
+            "range_position": "MP",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 5,
+            "occupant_id": "p5",
+            "range_position": "HJ",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 6,
+            "occupant_id": "p6",
+            "range_position": "CO",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 7,
+            "occupant_id": "p7",
+            "range_position": "BTN",
+            "roles": [
+              "BTN"
+            ],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          }
+        ],
+        "actor_seat_id": 3,
+        "hand_over": false,
+        "hero": {
+          "seat_id": 3,
+          "occupant_id": "p3",
+          "cards": [
+            "As",
+            "Ad"
+          ],
+          "stack": 10000
+        },
+        "settlement_preview": {
+          "status": "not_ready",
+          "reason": "incomplete_record",
+          "rows": [
+            {
+              "seat_id": 2,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 3,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 4,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 5,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 6,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 7,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            }
+          ]
+        },
+        "to_call": 200,
+        "min_raise_to": 400,
+        "max_raise_to": 10000,
+        "hand_id": "review-probe-hand",
+        "advice": {
+          "equity": {
+            "engine": "treys",
+            "exact": false,
+            "iterations": 1000,
+            "elapsedMs": 345,
+            "win": 42.8,
+            "tie": 2.1,
+            "lose": 55.1,
+            "equity": 43.68
+          },
+          "equity_share": 43.68,
+          "opponents": [
+            {
+              "pos": "SB",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "小盲防守",
+              "combos": 210,
+              "stack": 9800,
+              "risk_vs_hero": 9800
+            },
+            {
+              "pos": "UTG",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "面对加注（待行动）",
+              "combos": 92,
+              "stack": 10000,
+              "risk_vs_hero": 10000
+            },
+            {
+              "pos": "HJ",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "面对加注（待行动）",
+              "combos": 160,
+              "stack": 10000,
+              "risk_vs_hero": 10000
+            },
+            {
+              "pos": "CO",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "面对加注（待行动）",
+              "combos": 198,
+              "stack": 10000,
+              "risk_vs_hero": 10000
+            },
+            {
+              "pos": "BTN",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "面对加注（待行动）",
+              "combos": 234,
+              "stack": 10000,
+              "risk_vs_hero": 10000
+            }
+          ],
+          "to_call": 200,
+          "pot": 200,
+          "required_eq": 50.0,
+          "ev_call": 135.48,
+          "side_pots": [
+            {
+              "amount": 400,
+              "seats": [
+                "SB"
+              ],
+              "equity": 83.87
+            }
+          ],
+          "min_raise_to": 400,
+          "max_raise_to": 10000,
+          "effective_stack": 10000,
+          "m_value": 50.0,
+          "note": "对手范围按其翻前线路自动估算，可在范围图中调整",
+          "recommendation": {
+            "primary": "加注到 None BB",
+            "mix": [
+              {
+                "action": "raise",
+                "pct": 55,
+                "to_chips": 480,
+                "to_bb": null,
+                "label": "加注到 None BB"
+              },
+              {
+                "action": "call",
+                "pct": 45,
+                "label": "跟注 None BB"
+              }
+            ],
+            "reason": "权益领先：价值加注与跟注保护混合",
+            "spr": 50.0,
+            "spr_note": "SPR 很深，避免用边缘牌卷入大池",
+            "stack_note": "你的筹码覆盖所有对手，加注施压的风险相对低",
+            "covers_all": true,
+            "effective_stack": 10000
+          },
+          "cfr": {
+            "supported": false,
+            "reason": "CFR 参考从翻牌开始（翻牌/转牌/河牌单挑底池）"
+          },
+          "texture": null,
+          "range_adv": null,
+          "nut_adv": null
+        }
+      }
+    },
+    "view_positions": [
+      {
+        "seat_id": 2,
+        "range_position": "BB"
+      },
+      {
+        "seat_id": 3,
+        "range_position": "UTG"
+      },
+      {
+        "seat_id": 4,
+        "range_position": "MP"
+      },
+      {
+        "seat_id": 5,
+        "range_position": "HJ"
+      },
+      {
+        "seat_id": 6,
+        "range_position": "CO"
+      },
+      {
+        "seat_id": 7,
+        "range_position": "BTN"
+      }
+    ],
+    "advice_positions": [
+      {
+        "seat_id": null,
+        "pos": "SB"
+      },
+      {
+        "seat_id": null,
+        "pos": "UTG"
+      },
+      {
+        "seat_id": null,
+        "pos": "HJ"
+      },
+      {
+        "seat_id": null,
+        "pos": "CO"
+      },
+      {
+        "seat_id": null,
+        "pos": "BTN"
+      }
+    ],
+    "recommendation": {
+      "primary": "加注到 None BB",
+      "mix": [
+        {
+          "action": "raise",
+          "pct": 55,
+          "to_chips": 480,
+          "to_bb": null,
+          "label": "加注到 None BB"
+        },
+        {
+          "action": "call",
+          "pct": 45,
+          "label": "跟注 None BB"
+        }
+      ],
+      "reason": "权益领先：价值加注与跟注保护混合",
+      "spr": 50.0,
+      "spr_note": "SPR 很深，避免用边缘牌卷入大池",
+      "stack_note": "你的筹码覆盖所有对手，加注施压的风险相对低",
+      "covers_all": true,
+      "effective_stack": 10000
+    }
+  },
+  "final_table_icm": {
+    "expected": "Return ICM calculated from starting chips with physical seat IDs.",
+    "icm_present": false,
+    "request_result": {
+      "path": "/api/hand/v2/view",
+      "request": {
+        "protocol_version": 2,
+        "hand_id": "review-probe-hand",
+        "context": {
+          "session_id": "review-probe-session",
+          "capacity": 9,
+          "hero_occupant_id": "p3",
+          "participants": [
+            {
+              "seat_id": 1,
+              "occupant_id": "p1",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 3,
+              "occupant_id": "p3",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 4,
+              "occupant_id": "p4",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 5,
+              "occupant_id": "p5",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 6,
+              "occupant_id": "p6",
+              "starting_chips": 10000
+            }
+          ],
+          "button_seat_id": 6,
+          "small_blind_seat_id": 1,
+          "big_blind_seat_id": 2,
+          "blinds": {
+            "sb": 100,
+            "bb": 200,
+            "ante_each": 0
+          },
+          "learning_enabled": false,
+          "profile_names": {},
+          "icm": {
+            "scope": "final_table",
+            "payouts": [
+              500,
+              300,
+              200
+            ]
+          }
+        },
+        "hero_cards": [
+          "As",
+          "Ad"
+        ],
+        "ops": [],
+        "iterations": 1000,
+        "seed": 1
+      },
+      "status": 200,
+      "response": {
+        "street": "preflop",
+        "board": [],
+        "taken": [
+          "Ad",
+          "As"
+        ],
+        "pot": 300,
+        "seats": [
+          {
+            "seat_id": 1,
+            "occupant_id": "p1",
+            "range_position": "SB",
+            "roles": [
+              "SB"
+            ],
+            "stack": 9900,
+            "bet": 100,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 2,
+            "occupant_id": "p2",
+            "range_position": "BB",
+            "roles": [
+              "BB"
+            ],
+            "stack": 9800,
+            "bet": 200,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 3,
+            "occupant_id": "p3",
+            "range_position": "UTG",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": true,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 4,
+            "occupant_id": "p4",
+            "range_position": "HJ",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 5,
+            "occupant_id": "p5",
+            "range_position": "CO",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 6,
+            "occupant_id": "p6",
+            "range_position": "BTN",
+            "roles": [
+              "BTN"
+            ],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          }
+        ],
+        "actor_seat_id": 3,
+        "hand_over": false,
+        "hero": {
+          "seat_id": 3,
+          "occupant_id": "p3",
+          "cards": [
+            "As",
+            "Ad"
+          ],
+          "stack": 10000
+        },
+        "settlement_preview": {
+          "status": "not_ready",
+          "reason": "incomplete_record",
+          "rows": [
+            {
+              "seat_id": 1,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 2,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 3,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 4,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 5,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 6,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            }
+          ]
+        },
+        "to_call": 200,
+        "min_raise_to": 400,
+        "max_raise_to": 10000,
+        "hand_id": "review-probe-hand"
+      }
+    }
+  },
+  "named_learning": {
+    "expected": "Named opponent p2 triggers get_stats when learning is enabled.",
+    "get_stats_calls": 0,
+    "get_pool_calls": 5,
+    "request_result": {
+      "path": "/api/hand/v2/advice",
+      "request": {
+        "protocol_version": 2,
+        "hand_id": "review-probe-hand",
+        "context": {
+          "session_id": "review-probe-session",
+          "capacity": 9,
+          "hero_occupant_id": "p3",
+          "participants": [
+            {
+              "seat_id": 1,
+              "occupant_id": "p1",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 3,
+              "occupant_id": "p3",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 4,
+              "occupant_id": "p4",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 5,
+              "occupant_id": "p5",
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 6,
+              "occupant_id": "p6",
+              "starting_chips": 10000
+            }
+          ],
+          "button_seat_id": 6,
+          "small_blind_seat_id": 1,
+          "big_blind_seat_id": 2,
+          "blinds": {
+            "sb": 100,
+            "bb": 200,
+            "ante_each": 0
+          },
+          "learning_enabled": true,
+          "profile_names": {
+            "p2": "named-review-probe"
+          },
+          "icm": {
+            "scope": "off",
+            "payouts": []
+          }
+        },
+        "hero_cards": [
+          "As",
+          "Ad"
+        ],
+        "ops": [],
+        "iterations": 1000,
+        "seed": 1
+      },
+      "status": 200,
+      "response": {
+        "street": "preflop",
+        "board": [],
+        "taken": [
+          "Ad",
+          "As"
+        ],
+        "pot": 300,
+        "seats": [
+          {
+            "seat_id": 1,
+            "occupant_id": "p1",
+            "range_position": "SB",
+            "roles": [
+              "SB"
+            ],
+            "stack": 9900,
+            "bet": 100,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 2,
+            "occupant_id": "p2",
+            "range_position": "BB",
+            "roles": [
+              "BB"
+            ],
+            "stack": 9800,
+            "bet": 200,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 3,
+            "occupant_id": "p3",
+            "range_position": "UTG",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": true,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 4,
+            "occupant_id": "p4",
+            "range_position": "HJ",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 5,
+            "occupant_id": "p5",
+            "range_position": "CO",
+            "roles": [],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 6,
+            "occupant_id": "p6",
+            "range_position": "BTN",
+            "roles": [
+              "BTN"
+            ],
+            "stack": 10000,
+            "bet": 0,
+            "in_hand": true,
+            "folded": false,
+            "all_in": false,
+            "is_hero": false,
+            "starting_chips": 10000
+          }
+        ],
+        "actor_seat_id": 3,
+        "hand_over": false,
+        "hero": {
+          "seat_id": 3,
+          "occupant_id": "p3",
+          "cards": [
+            "As",
+            "Ad"
+          ],
+          "stack": 10000
+        },
+        "settlement_preview": {
+          "status": "not_ready",
+          "reason": "incomplete_record",
+          "rows": [
+            {
+              "seat_id": 1,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 2,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 3,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 4,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 5,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            },
+            {
+              "seat_id": 6,
+              "suggested_chips": null,
+              "source": "unknown",
+              "reason": "incomplete_record"
+            }
+          ]
+        },
+        "to_call": 200,
+        "min_raise_to": 400,
+        "max_raise_to": 10000,
+        "hand_id": "review-probe-hand",
+        "advice": {
+          "equity": {
+            "engine": "treys",
+            "exact": false,
+            "iterations": 1000,
+            "elapsedMs": 462,
+            "win": 43.0,
+            "tie": 1.3,
+            "lose": 55.7,
+            "equity": 43.55
+          },
+          "equity_share": 43.55,
+          "opponents": [
+            {
+              "pos": "SB",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "小盲防守",
+              "combos": 210,
+              "stack": 9900,
+              "risk_vs_hero": 9900
+            },
+            {
+              "pos": "BB",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "大盲防守",
+              "combos": 326,
+              "stack": 9800,
+              "risk_vs_hero": 9800
+            },
+            {
+              "pos": "HJ",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "面对加注（待行动）",
+              "combos": 160,
+              "stack": 10000,
+              "risk_vs_hero": 10000
+            },
+            {
+              "pos": "CO",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "面对加注（待行动）",
+              "combos": 198,
+              "stack": 10000,
+              "risk_vs_hero": 10000
+            },
+            {
+              "pos": "BTN",
+              "name": null,
+              "stats": null,
+              "narrowed": false,
+              "range_source": "位置图",
+              "line": "pending",
+              "situation": "面对加注（待行动）",
+              "combos": 234,
+              "stack": 10000,
+              "risk_vs_hero": 10000
+            }
+          ],
+          "to_call": 200,
+          "pot": 300,
+          "required_eq": 40.0,
+          "ev_call": 182.12,
+          "side_pots": [
+            {
+              "amount": 300,
+              "seats": [
+                "SB",
+                "BB"
+              ],
+              "equity": 71.34
+            },
+            {
+              "amount": 200,
+              "seats": [
+                "BB"
+              ],
+              "equity": 84.05
+            }
+          ],
+          "min_raise_to": 400,
+          "max_raise_to": 10000,
+          "effective_stack": 10000,
+          "m_value": 33.3,
+          "note": "对手范围按其翻前线路自动估算，可在范围图中调整",
+          "recommendation": {
+            "primary": "加注到 2.8 BB",
+            "mix": [
+              {
+                "action": "raise",
+                "pct": 55,
+                "to_chips": 550,
+                "to_bb": 2.8,
+                "label": "加注到 2.8 BB"
+              },
+              {
+                "action": "call",
+                "pct": 45,
+                "label": "跟注 1.0 BB"
+              }
+            ],
+            "reason": "权益领先：价值加注与跟注保护混合",
+            "spr": 33.3,
+            "spr_note": "SPR 很深，避免用边缘牌卷入大池",
+            "stack_note": "你的筹码覆盖所有对手，加注施压的风险相对低",
+            "covers_all": true,
+            "effective_stack": 10000
+          },
+          "cfr": {
+            "supported": false,
+            "reason": "CFR 参考从翻牌开始（翻牌/转牌/河牌单挑底池）"
+          },
+          "texture": null,
+          "range_adv": null,
+          "nut_adv": null
+        }
+      }
+    }
+  },
+  "invalid_inputs": [
+    {
+      "case": "icm_number",
+      "expected": "Reject invalid input with 4xx; never truncate chip amounts.",
+      "request_result": {
+        "path": "/api/table/prepare",
+        "request": {
+          "protocol_version": 2,
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 6,
+                "occupant_id": "p6",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 6,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": 7
+          }
+        },
+        "status": 500,
+        "response": "Internal Server Error"
+      }
+    },
+    {
+      "case": "null_operation",
+      "expected": "Reject invalid input with 4xx; never truncate chip amounts.",
+      "request_result": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 6,
+                "occupant_id": "p6",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 6,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [
+            null
+          ],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 500,
+        "response": "Internal Server Error"
+      }
+    },
+    {
+      "case": "iterations_string",
+      "expected": "Reject invalid input with 4xx; never truncate chip amounts.",
+      "request_result": {
+        "path": "/api/hand/v2/advice",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 6,
+                "occupant_id": "p6",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 6,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [],
+          "iterations": "bad",
+          "seed": 1
+        },
+        "status": 500,
+        "response": "Internal Server Error"
+      }
+    },
+    {
+      "case": "fractional_raise",
+      "expected": "Reject invalid input with 4xx; never truncate chip amounts.",
+      "request_result": {
+        "path": "/api/hand/v2/view",
+        "request": {
+          "protocol_version": 2,
+          "hand_id": "review-probe-hand",
+          "context": {
+            "session_id": "review-probe-session",
+            "capacity": 9,
+            "hero_occupant_id": "p3",
+            "participants": [
+              {
+                "seat_id": 1,
+                "occupant_id": "p1",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 2,
+                "occupant_id": "p2",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 3,
+                "occupant_id": "p3",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 4,
+                "occupant_id": "p4",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 5,
+                "occupant_id": "p5",
+                "starting_chips": 10000
+              },
+              {
+                "seat_id": 6,
+                "occupant_id": "p6",
+                "starting_chips": 10000
+              }
+            ],
+            "button_seat_id": 6,
+            "small_blind_seat_id": 1,
+            "big_blind_seat_id": 2,
+            "blinds": {
+              "sb": 100,
+              "bb": 200,
+              "ante_each": 0
+            },
+            "learning_enabled": false,
+            "profile_names": {},
+            "icm": {
+              "scope": "off",
+              "payouts": []
+            }
+          },
+          "hero_cards": [
+            "As",
+            "Ad"
+          ],
+          "ops": [
+            {
+              "op": "action",
+              "seat_id": 3,
+              "type": "raise",
+              "to": 400.7
+            }
+          ],
+          "iterations": 1000,
+          "seed": 1
+        },
+        "status": 200,
+        "response": {
+          "street": "preflop",
+          "board": [],
+          "taken": [
+            "Ad",
+            "As"
+          ],
+          "pot": 700,
+          "seats": [
+            {
+              "seat_id": 1,
+              "occupant_id": "p1",
+              "range_position": "SB",
+              "roles": [
+                "SB"
+              ],
+              "stack": 9900,
+              "bet": 100,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 2,
+              "occupant_id": "p2",
+              "range_position": "BB",
+              "roles": [
+                "BB"
+              ],
+              "stack": 9800,
+              "bet": 200,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 3,
+              "occupant_id": "p3",
+              "range_position": "UTG",
+              "roles": [],
+              "stack": 9600,
+              "bet": 400,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": true,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 4,
+              "occupant_id": "p4",
+              "range_position": "HJ",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 5,
+              "occupant_id": "p5",
+              "range_position": "CO",
+              "roles": [],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            },
+            {
+              "seat_id": 6,
+              "occupant_id": "p6",
+              "range_position": "BTN",
+              "roles": [
+                "BTN"
+              ],
+              "stack": 10000,
+              "bet": 0,
+              "in_hand": true,
+              "folded": false,
+              "all_in": false,
+              "is_hero": false,
+              "starting_chips": 10000
+            }
+          ],
+          "actor_seat_id": 4,
+          "hand_over": false,
+          "hero": {
+            "seat_id": 3,
+            "occupant_id": "p3",
+            "cards": [
+              "As",
+              "Ad"
+            ],
+            "stack": 9600
+          },
+          "settlement_preview": {
+            "status": "not_ready",
+            "reason": "incomplete_record",
+            "rows": [
+              {
+                "seat_id": 1,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 2,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 3,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 4,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 5,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              },
+              {
+                "seat_id": 6,
+                "suggested_chips": null,
+                "source": "unknown",
+                "reason": "incomplete_record"
+              }
+            ]
+          },
+          "to_call": 400,
+          "min_raise_to": 600,
+          "max_raise_to": 10000,
+          "hand_id": "review-probe-hand"
+        }
+      }
+    }
+  ],
+  "statistics_storage_calls": {
+    "load": 0,
+    "save": 0
+  }
+}

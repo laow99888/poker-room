@@ -254,6 +254,7 @@ def _v2_hand(body: dict, request: Request, want_advice: bool) -> dict:
     if body.get("protocol_version") != 2:
         raise HTTPException(400, "protocol_version 必须为 2")
     context = _context_of(body)
+    _validate_v2_hand(body)
     try:
         plan = table_context.engine_plan(context)
         state, plan, dealt = table_replay_context(context, body.get("hero_cards") or [],
@@ -262,6 +263,7 @@ def _v2_hand(body: dict, request: Request, want_advice: bool) -> dict:
         raise HTTPException(400, str(exc))
     hero_index = plan["seat_to_index"][plan["hero_seat_id"]]
     view = table_build_view_v2(state, context, plan, dealt)
+    _attach_icm_v2(view, context)
     if want_advice:
         if view["hand_over"]:
             raise HTTPException(400, "这手牌已经结束")
@@ -270,9 +272,9 @@ def _v2_hand(body: dict, request: Request, want_advice: bool) -> dict:
         try:
             advice = decision.advice_for(
                 state, hero_index, body.get("iterations", 50000),
-                body.get("seed"), None,
+                body.get("seed"), _v2_names(context, plan),
                 uid=_player_id(request),
-                learning_enabled=context["learning_enabled"])
+                learning_enabled=context["learning_enabled"], plan=plan)
         except TableError as exc:
             raise HTTPException(400, str(exc))
         return {**view, "hand_id": body.get("hand_id"), "advice": advice}
@@ -281,6 +283,59 @@ def _v2_hand(body: dict, request: Request, want_advice: bool) -> dict:
 
 from .table import replay_context as table_replay_context  # noqa: E402
 from .table import build_view_v2 as table_build_view_v2  # noqa: E402
+
+
+def _validate_v2_hand(body: dict) -> None:
+    cards = body.get("hero_cards")
+    ops = body.get("ops", [])
+    if not isinstance(cards, list) or len(cards) != 2 or any(not isinstance(c, str) for c in cards):
+        raise HTTPException(400, "hero_cards 须为两张牌的字符串数组")
+    if not isinstance(ops, list) or len(ops) > 1000:
+        raise HTTPException(400, "ops 须为数组且不超过 1000 步")
+    for op in ops:
+        if not isinstance(op, dict) or op.get("op") not in ("action", "board"):
+            raise HTTPException(400, "操作须为 action 或 board 对象")
+        if op["op"] == "board":
+            if (not isinstance(op.get("cards"), list) or len(op["cards"]) not in (1, 3)
+                    or any(not isinstance(c, str) for c in op["cards"])):
+                raise HTTPException(400, "公共牌须为 1 或 3 张牌的字符串数组")
+        else:
+            if type(op.get("seat_id")) is not int or any(key in op for key in ("seat", "seat_index", "index")):
+                raise HTTPException(400, "v2 行动必须使用整数 seat_id")
+            if op.get("type") not in ("fold", "check", "call", "raise", "allin"):
+                raise HTTPException(400, "未知动作")
+            if op["type"] == "raise" and (type(op.get("to")) is not int
+                                          or not 0 < op["to"] <= 2 ** 53 - 1):
+                raise HTTPException(400, "加注到须为正安全整数")
+    iterations = body.get("iterations", 50000)
+    if type(iterations) is not int or not 1000 <= iterations <= 1000000:
+        raise HTTPException(400, "模拟次数需为 1,000 到 1,000,000 之间的整数")
+    if body.get("seed") is not None and type(body["seed"]) is not int:
+        raise HTTPException(400, "seed 须为整数")
+    if body.get("hand_id") is not None and (not isinstance(body["hand_id"], str)
+                                           or not 1 <= len(body["hand_id"]) <= 64):
+        raise HTTPException(400, "hand_id 须为 1–64 字符")
+
+
+def _v2_names(context, plan):
+    return {plan["range_positions"][plan["seat_to_index"][p["seat_id"]]]: name
+            for p in context["participants"]
+            if (name := context["profile_names"].get(p["occupant_id"]))}
+
+
+def _attach_icm_v2(view, context):
+    if context["icm"]["scope"] != "final_table":
+        return
+    participants = context["participants"]
+    payouts = context["icm"]["payouts"]
+    values = icm_equities([p["starting_chips"] for p in participants], payouts)
+    pool = sum(payouts)
+    view["icm"] = {"snapshot": "hand-start", "payouts": payouts, "total": pool,
+                   "rows": [{"seat_id": p["seat_id"], "occupant_id": p["occupant_id"],
+                             "stack": p["starting_chips"], "equity": round(value, 2),
+                             "pct": round(value * 100 / pool, 2),
+                             "hero": p["occupant_id"] == context["hero_occupant_id"]}
+                            for p, value in zip(participants, values)]}
 
 
 @app.post("/api/hand/v2/view")
@@ -304,6 +359,7 @@ def hand_record_v2_api(payload: dict, request: Request):
     context = _context_of(payload)
     if not context.get("learning_enabled"):
         raise HTTPException(409, "学习记录未启用")
+    _validate_v2_hand(payload)
     try:
         plan = table_context.engine_plan(context)
         state, plan, _dealt = table_replay_context(
@@ -323,7 +379,7 @@ def hand_record_v2_api(payload: dict, request: Request):
              if oid in opp_seat and opp_seat[oid] in seat_pos}
     cfg = {"sb": context["blinds"]["sb"], "bb": context["blinds"]["bb"],
            "ante": context["blinds"]["ante_each"],
-           "player_count": plan["player_count"]}
+           "player_count": plan["player_count"], "range_positions": plan["range_positions"]}
     ops_legacy = []
     for op in payload.get("ops") or []:
         if op.get("op") == "action" and "seat_id" in op:

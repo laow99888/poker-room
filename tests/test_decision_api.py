@@ -399,7 +399,7 @@ def test_invalid_names_and_payouts_are_4xx():
     assert r4.status_code == 422
 
 
-def test_stats_reset_default_is_self_only():
+def test_stats_reset_default_is_self_only(monkeypatch):
     """38：reset 的保守默认——不带管理令牌时永远只清自己
     （无论部署是否配置了 POKER_ADMIN_TOKEN）；全清必须持令牌。"""
     import os
@@ -410,44 +410,46 @@ def test_stats_reset_default_is_self_only():
            {"op": "action", "type": "fold", "seat": "CO"},
            {"op": "action", "type": "fold", "seat": "BTN"},
            {"op": "action", "type": "fold", "seat": "SB"}]
-    payload = {"config": cfg, "hero_pos": "BB", "hero_cards": ["As", "Ad"],
-               "ops": ops, "names": {"BB": "老张"}}
-    old_token = os.environ.pop("POKER_ADMIN_TOKEN", None)
-    try:
-        # 未配置令牌：远程客户端也只能清自己
-        client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
-        r = client.post("/api/stats/reset", headers={"X-Player-Id": "u-a"})
-        assert r.json() == {"reset": "user"}, r.json()
-        assert client.get("/api/stats/summary/all",
-                     headers={"X-Player-Id": "u-a"}).json()["named"] == {}
-        # 配置令牌：无令牌仍是自清
-        os.environ["POKER_ADMIN_TOKEN"] = "tok-1"
-        client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
-        assert client.post("/api/stats/reset",
-                      headers={"X-Player-Id": "u-a"}).json() == {"reset": "user"}
-        assert client.get("/api/stats/summary/all",
-                     headers={"X-Player-Id": "u-a"}).json()["named"] == {}
-        # 错误令牌 ≠ 全清
-        client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
-        r = client.post("/api/stats/reset",
-                   headers={"X-Player-Id": "u-a", "X-Admin-Token": "wrong"})
-        assert r.json() == {"reset": "user"}
-        assert client.get("/api/stats/summary/all",
-                     headers={"X-Player-Id": "u-a"}).json()["named"] == {}
-        # 正确令牌 → 全清
-        r = client.post("/api/stats/reset",
-                   headers={"X-Player-Id": "u-a", "X-Admin-Token": "tok-1"})
-        assert r.json() == {"reset": "all"}
-    finally:
-        if old_token is not None:
-            os.environ["POKER_ADMIN_TOKEN"] = old_token
+    payload = {"config": cfg, "hero_pos": "BTN", "hero_cards": ["As", "Ad"],
+               "ops": ops, "names": {"BB": "老张"}, "learning_enabled": True}
+    monkeypatch.delenv("POKER_ADMIN_TOKEN", raising=False)
+    # 未配置令牌：远程客户端也只能清自己
+    recorded = client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
+    assert recorded.status_code == 200 and recorded.json()["recorded"]["recorded"]
+    assert opp.get_stats("老张", uid="u-a")["hands"] == 1
+    r = client.post("/api/stats/reset", headers={"X-Player-Id": "u-a"})
+    assert r.json() == {"reset": "user"}, r.json()
+    assert client.get("/api/stats/summary/all",
+                 headers={"X-Player-Id": "u-a"}).json()["named"] == {}
+    # 配置令牌：无令牌仍是自清
+    monkeypatch.setenv("POKER_ADMIN_TOKEN", "tok-1")
+    recorded = client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
+    assert recorded.status_code == 200 and recorded.json()["recorded"]["recorded"]
+    assert opp.get_stats("老张", uid="u-a")["hands"] == 1
+    assert client.post("/api/stats/reset",
+                  headers={"X-Player-Id": "u-a"}).json() == {"reset": "user"}
+    assert client.get("/api/stats/summary/all",
+                 headers={"X-Player-Id": "u-a"}).json()["named"] == {}
+    # 错误令牌 ≠ 全清
+    recorded = client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
+    assert recorded.status_code == 200 and recorded.json()["recorded"]["recorded"]
+    assert opp.get_stats("老张", uid="u-a")["hands"] == 1
+    r = client.post("/api/stats/reset",
+               headers={"X-Player-Id": "u-a", "X-Admin-Token": "wrong"})
+    assert r.json() == {"reset": "user"}
+    assert client.get("/api/stats/summary/all",
+                 headers={"X-Player-Id": "u-a"}).json()["named"] == {}
+    # 正确令牌 → 全清
+    r = client.post("/api/stats/reset",
+               headers={"X-Player-Id": "u-a", "X-Admin-Token": "tok-1"})
+    assert r.json() == {"reset": "all"}
 
 
 def test_cfr_raise_label_is_street_amount():
     """33：CFR 加注展示必须是本街金额且夹在引擎上下限内，
     不能把全手累计投入当成本街加注到。"""
     cfg = {"sb": 100, "bb": 200, "ante": 0, "player_count": 6,
-           "stacks": [10000, 10000, 10000, 10000, 1000, 10000]}
+           "stacks": [10000, 10000, 10000, 10000, 10000, 1000]}
     ops = [{"op": "action", "type": "fold", "seat": "UTG"},
            {"op": "action", "type": "fold", "seat": "HJ"},
            {"op": "action", "type": "fold", "seat": "CO"},
@@ -468,6 +470,8 @@ def test_cfr_raise_label_is_street_amount():
     adv = r.json()["advice"]
     lo, hi = adv["min_raise_to"], adv["max_raise_to"]
     assert lo is not None and hi is not None
+    assert hi == 800
+    assert adv["cfr"]["supported"] and adv["cfr"]["mix"]
     for m in adv["cfr"]["mix"]:
         if m["action"] == "raise" and "加注到" in m["label"]:
             amt = float(m["label"].replace("加注到 ", "").replace(" BB", "")) * 200

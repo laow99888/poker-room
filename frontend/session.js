@@ -32,6 +32,7 @@ function clone(value) {
 
 // 解析十进制字符串为 {scaled:BigInt, scale:BigInt}；非法返回 null。
 function parseDecimal(text) {
+  if (String(text).length > 100) return null;
   const m = /^(\d*)(?:\.(\d*))?$/.exec(String(text).trim());
   if (!m || (m[1] === "" && (m[2] === undefined || m[2] === ""))) return null;
   const intPart = m[1] || "0";
@@ -172,7 +173,7 @@ export function createSession(input) {
   const occupants = {};
   const seenOcc = new Set();
   for (const e of entries) {
-    if (!(e.seatId >= 1 && e.seatId <= capacity) || seats[e.seatId - 1].occupantId) {
+    if (!Number.isInteger(e.seatId) || !(e.seatId >= 1 && e.seatId <= capacity) || seats[e.seatId - 1].occupantId) {
       throw new DomainError("bad_seat", `座位非法或重复：${e.seatId}`);
     }
     assertIntChips(e.chips, "起始筹码");
@@ -184,8 +185,10 @@ export function createSession(input) {
     occupants[id] = {
       id, status: "active", confirmedChips: e.chips,
       profileName: e.name ? String(e.name) : null,
+      chipsEstimated: !!e.estimated,
     };
   }
+  assertIntChips(entries.reduce((sum, e) => sum + e.chips, 0), "全桌筹码");
   const heroOcc = seats[input.heroSeatId - 1]?.occupantId;
   if (!heroOcc) throw new DomainError("bad_hero", "英雄座位必须有人入座");
   const bl = input.blindLevel;
@@ -262,15 +265,14 @@ export function normalizePositions(pos, seats, occupants, _bb) {
     // 顺序自洽：SB（若有）是 BTN 后首位入局者、BB 为其下一位；无 SB 时 BB 是 BTN 后首位
     const order = orderFromButton(seats, seatedIds, btn);
     if (seatedIds.size === 2) {
-      if (!(sb === btn || sb === null)) {
-        if (sb !== order.find((s) => s !== btn)) {
-          throw new DomainError("bad_positions", "单挑位置矛盾（BTN 即 SB，另一人为 BB）");
-        }
+      if (sb !== btn || !seatedIds.has(btn)) {
+        throw new DomainError("bad_positions", "单挑位置矛盾（BTN 即 SB，另一人为 BB）");
       }
       if (bb === btn || !seatedIds.has(bb)) {
         throw new DomainError("bad_positions", "单挑 BB 不能是 BTN 座位");
       }
     } else if (sb === null || sb === undefined) {
+      if (seatedIds.size === seats.length) throw new DomainError("bad_positions", "满桌不能设置空小盲");
       if (order[0] !== bb) throw new DomainError("bad_positions", "空小盲时大盲必须是庄后首位入局者");
     } else {
       if (order[0] !== sb || order[1] !== bb) {
@@ -412,15 +414,19 @@ export function manualCloseHand(session, reason) {
   session.currentHand.recordQuality = "manual_close";
   session.currentHand.manualCloseReason = text;
   session.phase = "settling";
+  bumpRevision(session);
   session.settlementDraft = buildSettlementDraft(session, []);
-  return bumpRevision(session);
+  session.nextHandDraft ??= emptyNextHandDraft(session);
+  return session;
 }
 
 export function enterSettling(session, settlementPreview) {
   requirePhase(session, ["playing"]);
   session.phase = "settling";
+  bumpRevision(session);
   session.settlementDraft = buildSettlementDraft(session, settlementPreview || []);
-  return bumpRevision(session);
+  session.nextHandDraft ??= emptyNextHandDraft(session);
+  return session;
 }
 
 export function cancelSettlement(session) {
@@ -478,6 +484,7 @@ export function editSettlementRow(draft, seatId, finalChips, source = "manual") 
   }
   row.finalChips = n;
   row.source = source === "engine_verified" ? "engine_verified" : "manual";
+  row.confirmed = false;
   return draft;
 }
 
@@ -492,7 +499,7 @@ export function confirmAllCurrentValues(draft) {
 export function validateSettlement(session, draft) {
   const errors = [];
   const hand = session.currentHand;
-  if (draft.sourceHandId !== hand.handId) {
+  if (draft.sourceHandId !== hand.handId || draft.sourceRevision !== hand.revision) {
     errors.push("结算草稿与本手不匹配");
   }
   const participants = hand.context.participants;
@@ -501,6 +508,7 @@ export function validateSettlement(session, draft) {
   if (seatSet.size !== draft.rows.length) errors.push("结算行座位重复");
   for (const p of participants) {
     if (!seatSet.has(p.seat_id)) errors.push(`座位 ${p.seat_id} 缺少结算行`);
+    if (draft.rows.find(r => r.seatId === p.seat_id)?.occupantId !== p.occupant_id) errors.push("结算玩家身份不一致");
   }
   let sum = 0;
   for (const row of draft.rows) {
@@ -538,13 +546,12 @@ export function emptyNextHandDraft(session) {
 //      | {type:'move', occupantId, targetSeatId}
 export function applyRosterEdit(session, draft, edit) {
   requirePhase(session, ["settling"]);
+  const candidate = previewRoster(session, draft.rosterEdits);
+  session = candidate;
   if (edit.type === "enter") {
     const seat = session.seats.find((x) => x.id === edit.seatId);
     if (!seat) throw new DomainError("bad_seat", "座位不存在");
-    const pendingLeave = draft.rosterEdits.some(
-      (e) => e.type === "leave"
-        && session.seats.find((x) => x.occupantId === e.occupantId)?.id === edit.seatId);
-    if (seat.occupantId && !pendingLeave
+    if (seat.occupantId
       && session.occupants[seat.occupantId]?.status === "active") {
       throw new DomainError("seat_occupied", "只能入座空座");
     }
@@ -557,26 +564,70 @@ export function applyRosterEdit(session, draft, edit) {
     });
   } else if (edit.type === "leave") {
     const occ = session.occupants[edit.occupantId];
+    if (occ?.status === "eliminated" && edit.reason === "eliminated") return draft;
     if (!occ || occ.status !== "active") throw new DomainError("bad_occupant", "该玩家不在座");
     if (edit.occupantId === session.heroOccupantId && edit.reason !== "table_transfer") {
       throw new DomainError("bad_leave", "英雄离开本桌将结束会话，请使用结束牌桌");
     }
+    if (!["eliminated", "table_transfer"].includes(edit.reason)) throw new DomainError("bad_leave", "离桌原因无效");
+    if (edit.reason === "eliminated" && occ.confirmedChips !== 0) throw new DomainError("bad_leave", "淘汰者余额须为 0");
     draft.rosterEdits.push({ type: "leave", occupantId: edit.occupantId, reason: edit.reason });
   } else if (edit.type === "move") {
     const occ = session.occupants[edit.occupantId];
     if (!occ || occ.status !== "active") throw new DomainError("bad_occupant", "该玩家不在座");
     const target = session.seats.find((x) => x.id === edit.targetSeatId);
-    const pendingLeave = draft.rosterEdits.some(
-      (e) => e.type === "leave"
-        && session.seats.find((x) => x.occupantId === e.occupantId)?.id === edit.targetSeatId);
-    if (!target || (target.occupantId && target.occupantId !== edit.occupantId && !pendingLeave)) {
+    if (!target || target.occupantId) {
       throw new DomainError("seat_occupied", "只能移动到空座");
     }
     draft.rosterEdits.push({ type: "move", occupantId: edit.occupantId, targetSeatId: edit.targetSeatId });
   } else {
     throw new DomainError("bad_edit", `未知成员操作：${edit.type}`);
   }
+  draft.positions = null;
+  if (edit.type === "enter" || (edit.type === "leave" && edit.reason === "table_transfer")) {
+    draft.icm = { scope: "off", payouts: [], rosterConfirmed: false };
+  }
   return draft;
+}
+
+// UI、位置预览、最终提交共享同一套名单迁移，禁止覆盖占用中的目标座位。
+export function previewRoster(session, edits = []) {
+  const next = clone(session);
+  for (const row of session.settlementDraft?.rows || []) {
+    const occ = next.occupants[row.occupantId];
+    if (!occ || row.finalChips === null) continue;
+    occ.confirmedChips = row.finalChips;
+    occ.chipsEstimated = false;
+    if (row.finalChips === 0) {
+      occ.status = "eliminated";
+      const seat = next.seats.find(s => s.occupantId === occ.id);
+      if (seat) seat.occupantId = null;
+    }
+  }
+  for (const edit of edits) {
+    const from = next.seats.find(s => s.occupantId === edit.occupantId);
+    const occ = next.occupants[edit.occupantId];
+    if (edit.type === "leave") {
+      if (!["eliminated", "table_transfer"].includes(edit.reason)) throw new DomainError("bad_leave", "离桌原因无效");
+      if (!occ || (!from && occ.status !== "eliminated")) throw new DomainError("bad_occupant", "离桌玩家已不在座");
+      if (edit.reason === "eliminated" && occ.confirmedChips !== 0) throw new DomainError("bad_leave", "淘汰者实际余额须为 0");
+      occ.status = edit.reason === "eliminated" ? "eliminated" : "departed";
+      if (from) from.occupantId = null;
+    } else if (edit.type === "move" || edit.type === "enter") {
+      const to = next.seats.find(s => s.id === (edit.targetSeatId ?? edit.seatId));
+      if (!to || to.occupantId) throw new DomainError("seat_occupied", "目标必须是空座");
+      if (edit.type === "move") {
+        if (!from || occ?.status !== "active") throw new DomainError("bad_occupant", "移动玩家已不在座");
+        from.occupantId = null;
+      } else {
+        assertIntChips(edit.chips, "入座筹码");
+        if (!edit.chips || next.occupants[edit.occupantId]) throw new DomainError("bad_occupant", "入座身份或筹码无效");
+        next.occupants[edit.occupantId] = {id: edit.occupantId, status: "active", confirmedChips: edit.chips, profileName: edit.name || null};
+      }
+      to.occupantId = edit.occupantId;
+    } else throw new DomainError("bad_edit", "未知成员操作");
+  }
+  return next;
 }
 
 /* ------------------------------------------------- P01/P02 位置轮转与预览 */
@@ -612,23 +663,7 @@ export function automaticNextPositions(session) {
 // P02：名单变化后的候选预览（预填，需用户确认现场位置）。
 // rosterEdits：本手结算草稿中已排队、尚未应用的成员操作——预览基于变化后的名单。
 export function previewNextPositions(session, rosterEdits = []) {
-  const sim = clone(session);
-  for (const edit of rosterEdits) {
-    if (edit.type === "leave") {
-      const seat = sim.seats.find((s) => s.occupantId === edit.occupantId);
-      if (seat) seat.occupantId = null;
-    } else if (edit.type === "move") {
-      const from = sim.seats.find((s) => s.occupantId === edit.occupantId);
-      const to = sim.seats.find((s) => s.id === edit.targetSeatId);
-      if (from) from.occupantId = null;
-      if (to) to.occupantId = edit.occupantId;
-    } else if (edit.type === "enter") {
-      const seat = sim.seats.find((s) => s.id === edit.seatId);
-      if (seat) seat.occupantId = edit.occupantId;
-      sim.occupants[edit.occupantId] = { id: edit.occupantId, status: "active", confirmedChips: edit.chips, profileName: null };
-    }
-  }
-  return previewPositionsOf(sim);
+  return previewPositionsOf(previewRoster(session, rosterEdits));
 }
 
 function previewPositionsOf(session) {
@@ -729,6 +764,8 @@ export function beginCommit(session, opts) {
     throw err;
   }
   const nextDraft = opts?.nextHandDraft || session.nextHandDraft || emptyNextHandDraft(session);
+  if (nextDraft.settingsError) throw new DomainError("bad_settings", nextDraft.settingsError);
+  setDraftBlinds(nextDraft, nextDraft.blindLevel.sb, nextDraft.blindLevel.bb, nextDraft.blindLevel.anteEach);
   const tx = {
     transactionId: newId("t"),
     sourceHandId: draft.sourceHandId,
@@ -736,6 +773,7 @@ export function beginCommit(session, opts) {
     startingSession: clone(session),
     settlement: clone(draft),
     nextDraft: clone(nextDraft),
+    fingerprint: JSON.stringify(session),
   };
   return tx;
 }
@@ -743,14 +781,13 @@ export function beginCommit(session, opts) {
 // prepared: {context, mapping}（后端 /api/table/prepare 返回）。
 // 返回新会话（原子替换）；调用方持久化成功后才替换可见状态（S02 步骤 7）。
 export function completeCommit(session, tx, prepared) {
-  if (session.currentHand.handId !== tx.sourceHandId) {
-    throw new DomainError("stale_commit", "本手已变化，请重新核对结算");
-  }
-  // lastCommit 幂等：同源手已提交过 → 拒绝重复执行
+  // 同一事务重试返回已经保存的状态，不再次创建新手。
+  if (session.lastCommit?.transactionId === tx.transactionId) return clone(session);
   if (session.lastCommit && session.lastCommit.sourceHandId === tx.sourceHandId) {
     throw new DomainError("already_committed", "本手已结算，重复提交被忽略");
   }
-  const next = clone(session);
+  assertCommitCurrent(session, tx);
+  const next = previewRoster(tx.startingSession, tx.nextDraft.rosterEdits);
   const hand = next.currentHand;
   const summary = {
     handId: hand.handId,
@@ -782,45 +819,15 @@ export function completeCommit(session, tx, prepared) {
   next.recentHands.push(summary);
   if (next.recentHands.length > 100) next.recentHands.shift();
 
-  // 3：应用确认余额；0 筹码者淘汰
-  for (const row of tx.settlement.rows) {
-    const occ = next.occupants[row.occupantId];
-    if (!occ) continue;
-    occ.confirmedChips = row.finalChips;
-    if (row.finalChips === 0 && occ.status === "active") occ.status = "eliminated";
-  }
-  // 4：应用名单变化
-  let heroGone = false;
-  for (const edit of tx.nextDraft.rosterEdits) {
-    if (edit.type === "leave") {
-      const occ = next.occupants[edit.occupantId];
-      if (occ) occ.status = edit.reason === "eliminated" ? "eliminated" : "departed";
-      const seat = next.seats.find((s) => s.occupantId === edit.occupantId);
-      if (seat) seat.occupantId = null;
-      if (edit.occupantId === next.heroOccupantId) heroGone = true;
-    } else if (edit.type === "move") {
-      const from = next.seats.find((s) => s.occupantId === edit.occupantId);
-      const to = next.seats.find((s) => s.id === edit.targetSeatId);
-      if (from) from.occupantId = null;
-      if (to) to.occupantId = edit.occupantId;
-    } else if (edit.type === "enter") {
-      const seat = next.seats.find((s) => s.id === edit.seatId);
-      if (!seat || seat.occupantId) throw new DomainError("seat_occupied", "入座目标非空座");
-      seat.occupantId = edit.occupantId;
-      next.occupants[edit.occupantId] = {
-        id: edit.occupantId, status: "active",
-        confirmedChips: edit.chips, profileName: edit.name || null,
-      };
-    }
-  }
+  const heroGone = next.occupants[next.heroOccupantId]?.status !== "active";
   const activeCount = activeSeats(next).length;
 
   next.blindLevel = { ...tx.nextDraft.blindLevel };
   next.learningEnabled = tx.nextDraft.learningEnabled;
   next.icm = clone(tx.nextDraft.icm);
-  next.positions = tx.nextDraft.positions
-    ? clone(tx.nextDraft.positions)
-    : automaticNextPositions({ ...next, positions: next.positions });
+  for (const [id, name] of Object.entries(tx.nextDraft.profileNames || {})) {
+    if (next.occupants[id]) next.occupants[id].profileName = String(name).trim() || null;
+  }
 
   const lastCommit = {
     sourceHandId: tx.sourceHandId,
@@ -840,6 +847,15 @@ export function completeCommit(session, tx, prepared) {
   }
 
   // 6：生成下一手
+  const rosterChanged = JSON.stringify(activeSeats(next)) !== JSON.stringify(activeSeats(session))
+    || tx.nextDraft.rosterEdits.length > 0 || session.positions.smallBlindSeatId === null
+    || !activeSeats(session).includes(session.positions.buttonSeatId);
+  if (rosterChanged && !tx.nextDraft.positions?.confirmed) {
+    throw new DomainError("positions_required", "人数或座位有变化，请核对下一手庄位和盲位");
+  }
+  if (tx.nextDraft.positions && !tx.nextDraft.positions.confirmed) throw new DomainError("positions_required", "请确认已修改的现场位置");
+  next.positions = tx.nextDraft.positions ? clone(tx.nextDraft.positions) : automaticNextPositions(next);
+  next.icm = normalizeIcm(next.icm, next.occupants);
   const validated = normalizePositions(next.positions, next.seats, next.occupants, next.blindLevel.bb);
   next.positions = validated;
   next.previousBigBlindOccupantId = activeOccupantAt(session, session.positions.bigBlindSeatId)?.id || null;
@@ -855,6 +871,13 @@ export function completeCommit(session, tx, prepared) {
   next.sessionRevision += 1;
   // 手号推进后 currentHand.revision 重新从 1 计（新手）
   return next;
+}
+
+export function assertCommitCurrent(session, tx) {
+  if (session.phase !== "settling" || session.currentHand?.handId !== tx.sourceHandId
+      || session.currentHand.revision !== tx.sourceRevision || JSON.stringify(session) !== tx.fingerprint) {
+    throw new DomainError("stale_commit", "本手或草稿已变化，请重新核对结算");
+  }
 }
 
 /* -------------------------------------------------------------- 辅助校验 */

@@ -1,0 +1,261 @@
+{
+  "errors": [],
+  "responses": [
+    {
+      "url": "http://127.0.0.1:8141/api/table/prepare",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/table/prepare",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/table/prepare",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/table/prepare",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/table/prepare",
+      "status": 400,
+      "body": "{\"detail\":\"起始筹码须为正整数：0\"}"
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/table/prepare",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8141/api/hand/v2/view",
+      "status": 400,
+      "body": "{\"detail\":\"flop 应一次发 3 张，收到 1 张\"}"
+    }
+  ],
+  "scenarios": {
+    "setupVisibility": {
+      "unit": "bb",
+      "visibleNames": 6
+    },
+    "bbInput": {
+      "selected": "BB",
+      "typed": 50,
+      "actualChips": [
+        50,
+        50,
+        50,
+        50,
+        50,
+        50
+      ],
+      "expected": 10000
+    },
+    "staleSetupPreview": {
+      "editedChips": 20000,
+      "savedChips": 10000
+    },
+    "normalSettlement": {
+      "sourceHandId": "h-d1a491f6-8a16-4f5a-b696-83ed49b1edef",
+      "sourceRevision": 8,
+      "rows": [
+        {
+          "seatId": 1,
+          "occupantId": "p-beb5e3fa-0a46-448e-8de2-9df98e884fd8",
+          "finalChips": 9900,
+          "source": "engine_verified",
+          "confirmed": false
+        },
+        {
+          "seatId": 2,
+          "occupantId": "p-c70ab280-64ba-4528-9faf-b06f23f13473",
+          "finalChips": 10100,
+          "source": "engine_verified",
+          "confirmed": false
+        },
+        {
+          "seatId": 3,
+          "occupantId": "p-c9982556-1314-4aad-928f-9bfcadd4781f",
+          "finalChips": 10000,
+          "source": "engine_verified",
+          "confirmed": false
+        },
+        {
+          "seatId": 4,
+          "occupantId": "p-94673092-7f37-4498-8c34-996d68fa8982",
+          "finalChips": 10000,
+          "source": "engine_verified",
+          "confirmed": false
+        },
+        {
+          "seatId": 5,
+          "occupantId": "p-d1391f2e-7baf-4d05-81e0-3b6516627a9a",
+          "finalChips": 10000,
+          "source": "engine_verified",
+          "confirmed": false
+        },
+        {
+          "seatId": 6,
+          "occupantId": "p-57e6132c-bd17-402f-b6bd-3820fe8c6f5b",
+          "finalChips": 10000,
+          "source": "engine_verified",
+          "confirmed": false
+        }
+      ],
+      "adjustmentReason": null,
+      "differenceAccepted": false
+    },
+    "nextSettings": "下一手设置\n（盲注 / 成员 / 位置校准，确认后生效）",
+    "normalNext": {
+      "hand": 2,
+      "caption": "本桌第 2 手 · 待选底牌"
+    },
+    "manualCloseDraft": {
+      "nextHandDraft": null
+    },
+    "manualCloseRestore": {
+      "phase": "settling",
+      "errors": [],
+      "console": "请核对全桌手后实际余额，确认后进入下一手。"
+    },
+    "elimination": {
+      "phase": "settling",
+      "error": "结算未完成：起始筹码须为正整数：0"
+    },
+    "flopBeforeDeal": {
+      "button": "发翻牌（1 张）",
+      "status": "你已弃牌。当前轮到 null号座，可继续录入其余玩家动作。"
+    },
+    "flopResponse": {
+      "status": 400,
+      "body": "{\"detail\":\"flop 应一次发 3 张，收到 1 张\"}"
+    },
+    "flopAfterOneCard": {
+      "status": "你已弃牌。当前轮到 null号座，可继续录入其余玩家动作。",
+      "tip": "（点“发公共牌”进入选牌）",
+      "ops": [
+        {
+          "op": "action",
+          "seat_id": 3,
+          "type": "fold"
+        },
+        {
+          "op": "action",
+          "seat_id": 4,
+          "type": "fold"
+        },
+        {
+          "op": "action",
+          "seat_id": 5,
+          "type": "fold"
+        },
+        {
+          "op": "action",
+          "seat_id": 6,
+          "type": "call"
+        },
+        {
+          "op": "action",
+          "seat_id": 1,
+          "type": "fold"
+        },
+        {
+          "op": "action",
+          "seat_id": 2,
+          "type": "check"
+        }
+      ]
+    }
+  }
+}

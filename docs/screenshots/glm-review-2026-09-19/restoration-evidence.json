@@ -1,0 +1,21 @@
+{
+  "scope": "Restore a synthetic F3 session through real storage, API and UI. This is not a click-through of the blocked flop entry.",
+  "errors": [],
+  "unknownRows": [
+    {
+      "seat": 2,
+      "source": "pending",
+      "confirmed": false,
+      "uiSource": "已核对",
+      "displayedSeatStack": "51.5BB\n        10,300"
+    },
+    {
+      "seat": 6,
+      "source": "pending",
+      "confirmed": false,
+      "uiSource": "已核对",
+      "displayedSeatStack": "49.0BB\n        9,800"
+    }
+  ],
+  "hiddenLearningNames": 0
+}

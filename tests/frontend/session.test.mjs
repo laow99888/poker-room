@@ -241,7 +241,7 @@ test("S-01 重录本手：handId/context/手数/庄位不变，ops 清空 revisi
   assert.equal(s.currentHand.handNumber, 1);
 });
 
-test("S-03 同源手重复提交被拒绝（lastCommit 幂等）", () => {
+test("S-03 同事务重试返回已保存结果，其他同源事务拒绝", () => {
   let s = f1();
   s.phase = "settling";
   s.settlementDraft = buildSettlementDraft(s, []);
@@ -249,7 +249,8 @@ test("S-03 同源手重复提交被拒绝（lastCommit 幂等）", () => {
   const tx = beginCommit(s);
   s = completeCommit(s, tx, null);
   const handNo = s.currentHand.handNumber;
-  assert.throws(() => completeCommit(s, tx, null), DomainError);
+  assert.deepEqual(completeCommit(s, tx, null), s);
+  assert.throws(() => completeCommit(s, {...tx, transactionId: "other"}, null), DomainError);
   assert.equal(s.currentHand.handNumber, handNo);
 });
 

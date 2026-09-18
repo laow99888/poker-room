@@ -13,13 +13,20 @@
 """
 
 import random
+from functools import wraps
+from threading import RLock
 from typing import Optional
 
 from pokerkit import Automation, Card as PKCard, NoLimitTexasHoldem
 
 TABLE_SIZES = (6, 8, 9)
 _POSITIONS_BY_SIZE = {
+    2: ("BB", "BTN"),
+    3: ("SB", "BB", "BTN"),
+    4: ("SB", "BB", "CO", "BTN"),
+    5: ("SB", "BB", "UTG", "CO", "BTN"),
     6: ("SB", "BB", "UTG", "HJ", "CO", "BTN"),
+    7: ("SB", "BB", "UTG", "MP", "HJ", "CO", "BTN"),
     8: ("SB", "BB", "UTG", "UTG+1", "MP", "HJ", "CO", "BTN"),
     9: ("SB", "BB", "UTG", "UTG+1", "UTG+2", "MP", "HJ", "CO", "BTN"),
 }
@@ -45,6 +52,16 @@ _AUTOMATIONS = (
 )
 
 _FILLER_SEED = 20260916  # 占位牌固定种子，保证同一手牌回放完全一致
+_REPLAY_LOCK = RLock()
+
+
+def _serialized_replay(function):
+    # PokerKit 烧牌使用全局 random；保护 seed/restore，避免并发回放互相改种子。
+    @wraps(function)
+    def replay_locked(*args, **kwargs):
+        with _REPLAY_LOCK:
+            return function(*args, **kwargs)
+    return replay_locked
 
 _ALL_CARDS = [r + s for s in "cdhs" for r in "AKQJT98765432"]
 
@@ -74,7 +91,7 @@ def build_state(config: dict) -> "NoLimitTexasHoldem":
         stacks = config.get("stacks")
     except (KeyError, TypeError, ValueError) as exc:
         raise TableError(f"配置不完整或非法：{exc}") from exc
-    if player_count not in _POSITIONS_BY_SIZE:
+    if player_count not in TABLE_SIZES:
         raise TableError(f"桌型仅支持 {list(_POSITIONS_BY_SIZE)} 人桌")
     if not 0 < sb <= bb:
         raise TableError("需要 0 < 小盲 ≤ 大盲")
@@ -307,6 +324,7 @@ def replay(config: dict, hero_pos: str, hero_cards, ops) -> dict:
     return hand_view(state, hero_index, dealt)
 
 
+@_serialized_replay
 def replay_state(config: dict, hero_pos: str, hero_cards, ops):
     """同 replay，但返回 (引擎状态, 英雄座位索引, 发牌表) 供建议计算复用。
 
@@ -347,6 +365,7 @@ def replay_state(config: dict, hero_pos: str, hero_cards, ops):
 
 # ------------------------------------------------------------------ v2 连续牌桌
 
+@_serialized_replay
 def replay_context(context: dict, hero_cards, ops):
     """v2 回放：物理座位上下文 → 引擎。
 
@@ -356,13 +375,9 @@ def replay_context(context: dict, hero_cards, ops):
     from . import table_context   # 延迟导入避免循环
 
     plan = table_context.engine_plan(context)
-    state = _create_engine_state(
-        plan["player_count"], plan["raw_blinds"][0], plan["raw_blinds"][1],
-        plan["antes"], plan["stacks"], plan["min_bet"])
     hero_index = plan["seat_to_index"][plan["hero_seat_id"]]
     declared_board = [c for op in ops if op.get("op") == "board"
                       for c in op.get("cards", [])]
-    dealt = deal_hole(state, hero_index, hero_cards, reserve=declared_board)
     v2_ops = []
     for op in ops:
         if op.get("op") == "action":
@@ -374,8 +389,26 @@ def replay_context(context: dict, hero_cards, ops):
                            "type": op.get("type"), "to": op.get("to")})
         else:
             v2_ops.append(op)
-    apply_ops(state, v2_ops, dealt=dealt, hero_index=hero_index)
-    return state, plan, dealt
+    last_error = None
+    for attempt in range(8):
+        rng_state = random.getstate()
+        random.seed(_FILLER_SEED + attempt)
+        try:
+            state = _create_engine_state(
+                plan["player_count"], *plan["raw_blinds"],
+                plan["antes"], plan["stacks"], plan["min_bet"])
+            dealt = deal_hole(state, hero_index, hero_cards, reserve=declared_board)
+            apply_ops(state, v2_ops, dealt=dealt, hero_index=hero_index)
+            return state, plan, dealt
+        except TableError as exc:
+            if "撞车" not in str(exc):
+                raise
+            last_error = exc
+        except ValueError as exc:
+            raise TableError(str(exc)) from exc
+        finally:
+            random.setstate(rng_state)
+    raise last_error
 
 
 def build_view_v2(state, context: dict, plan: dict, dealt: dict) -> dict:
@@ -414,6 +447,9 @@ def build_view_v2(state, context: dict, plan: dict, dealt: dict) -> dict:
         "seats": seats,
         "actor_seat_id": actor_seat,
         "hand_over": not state.status,
+        "board_dealing_count": (state.streets[state.street_index].board_dealing_count
+                                if state.can_deal_board() else 0),
+        "can_fold": state.can_fold(),
         "hero": {
             "seat_id": hero_seat,
             "occupant_id": context["hero_occupant_id"],
@@ -422,6 +458,12 @@ def build_view_v2(state, context: dict, plan: dict, dealt: dict) -> dict:
         },
         "settlement_preview": settlement_preview(state, plan, dealt),
     }
+    if not state.status:
+        balances = {r["seat_id"]: r["suggested_chips"]
+                    for r in view["settlement_preview"]["rows"]}
+        for seat in seats:
+            seat["stack"] = balances[seat["seat_id"]]
+        view["hero"]["stack"] = balances[hero_seat]
     if actor_seat is not None:
         view["to_call"] = state.checking_or_calling_amount
         view["min_raise_to"] = state.min_completion_betting_or_raising_to_amount

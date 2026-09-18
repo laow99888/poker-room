@@ -148,8 +148,11 @@ def test_user_namespaces_isolate_profiles(stats_file):
            {"op": "action", "type": "fold", "seat": "SB"}]
     state, _, _ = replay_state(cfg, "BTN", ["As", "Ad"], ops)
     intel = player_intel(state)
-    pool_before = opponents.get_pool("BTN")   # 41：共享池快照，重置后必须不变
+    for i in range(10):
+        opponents.record_hand(cfg, ops, {}, intel, hand_id=f"seed-{i}", uid="pool-seed")
     opponents.record_hand(cfg, ops, {"BTN": "老王"}, intel, uid="user-A")
+    pool_before = opponents.get_pool("BTN")
+    assert pool_before is not None and pool_before["hands"] == 11
     assert opponents.get_stats("老王", uid="user-A")["hands"] == 1
     assert opponents.get_stats("老王", uid="user-B")["hands"] == 0
     opponents.reset_user("user-A")

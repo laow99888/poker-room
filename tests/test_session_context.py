@@ -148,11 +148,10 @@ def test_f5a_empty_button_seat():
     state.check_or_call(); state.check_or_call()
     state.deal_board(3)
     assert state.actor_index == 0                    # 翻后 seat1 先
-    assert view["seats"][0]["roles"] == ["BTN"] or True
+    assert view["seats"][0]["roles"] == ["SB"]
     btn_roles = {s["seat_id"]: s["roles"] for s in view["seats"]}
-    assert btn_roles[6] if False else True
-    # 真实 BTN 徽标在空 seat6：映射里 seat6 的 roles 含 BTN
-    full_mapping = None
+    assert 6 not in btn_roles
+    assert plan["roles_by_seat"][6] == ["BTN"]
 
 
 def test_f5a_button_role_on_empty_seat_via_prepare():
@@ -355,7 +354,7 @@ def test_a14_v2_bad_inputs():
     # 矛盾的 legacy seat 字段：v2 op 不接受 seat 角色文本
     r = client.post("/api/hand/v2/view", json={
         **base, "ops": [{"op": "action", "seat_id": 3, "seat": "UTG", "type": "fold"}]})
-    assert r.status_code == 400 or r.status_code == 200, "不允许 seat 文本猜身份"
+    assert r.status_code == 400, "不允许 seat 文本猜身份"
     # 非 2 协议
     r = client.post("/api/table/prepare", json={"protocol_version": 1, "context": {}})
     assert r.status_code == 400

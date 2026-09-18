@@ -1,0 +1,4 @@
+{
+  "error": "TimeoutError: Waiting for selector `.rec-primary` failed\n    at CSSQueryHandler.waitFor (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/common/QueryHandler.js:211:46)\n    at runNextTicks (node:internal/process/task_queues:65:5)\n    at listOnTimeout (node:internal/timers:597:9)\n    at process.processTimers (node:internal/timers:571:7)\n    at async CdpFrame.waitForSelector (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/api/Frame.js:541:21)\n    at async CdpPage.waitForSelector (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/api/Page.js:1387:20)\n    at async file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/session.e2e.mjs:149:3",
+  "errors": []
+}

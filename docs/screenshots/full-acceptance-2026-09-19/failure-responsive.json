@@ -1,0 +1,8 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: setup-9-320: overlapping seats\n+ actual - expected\n\n+ [\n+   [\n+     0,\n+     1\n+   ],\n+   [\n+     0,\n+     8\n+   ]\n+ ]\n- []\n\n    at checkLayout (file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/acceptance.e2e.mjs:80:10)\n    at async file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/acceptance.e2e.mjs:193:142",
+  "state": null,
+  "runtime": {
+    "requests": [],
+    "errors": []
+  }
+}

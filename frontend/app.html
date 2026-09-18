@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>大魔丸 · 锦标赛逐手记录与局面推演</title>
-<link rel="stylesheet" href="style.css?v=20260922e">
+<link rel="stylesheet" href="style.css?v=20260922f">
 </head>
 <body>
 <div class="felt-vignette" aria-hidden="true"></div>
@@ -18,6 +18,10 @@
     <span id="bar-main-slot"></span>
   </div>
 </header>
+<div id="conflict-banner" class="form-error" role="alert" hidden>
+  其他标签页已更新牌桌，本页已暂停。
+  <button type="button" onclick="location.reload()">载入最新记录</button>
+</div>
 
 <main id="layout" data-phase="setup">
   <!-- 牌桌列：进行中/结算时优先 -->
@@ -35,6 +39,7 @@
           <div class="pot-line">底池 <b id="pot-num">0</b></div>
           <div class="slots board" id="board-slots"></div>
           <div class="board-caption" id="street-caption"></div>
+          <div id="hero-cards" aria-label="我的底牌"></div>
         </div>
       </div>
     </div>
@@ -55,11 +60,10 @@
       <div class="setup-row">
         <label>座位容量
           <select id="tg-capacity">
-            <option>2</option><option>3</option><option>4</option><option>5</option>
-            <option selected>6</option><option>7</option><option>8</option><option>9</option>
+            <option selected>6</option><option>8</option><option>9</option>
           </select>
         </label>
-        <label>盲注单位
+        <label>我的筹码单位
           <select id="tg-unit"><option value="bb" selected>BB 输入</option><option value="chips">筹码输入</option></select>
         </label>
       </div>
@@ -68,13 +72,14 @@
         <label>小盲 <input type="number" id="tg-sb" value="100" min="1"></label>
         <label>大盲 <input type="number" id="tg-bb" value="200" min="1"></label>
         <label>每人前注 <input type="number" id="tg-ante" value="0" min="0"></label>
-        <label id="tg-default-wrap">统一初始 <input type="number" id="tg-default-chips" value="10000" min="1"></label>
+        <label id="tg-default-wrap">我的初始筹码 <input type="number" id="tg-default-chips" value="50" min="0" step="any"></label>
       </div>
-      <p class="footnote" id="tg-unit-hint">统一初始筹码仅作批量预填，可在下方逐座修改。</p>
+      <p class="footnote" id="tg-unit-hint"></p>
 
-      <div class="setup-row"><span class="inline-label">有人座位与起始筹码 <span class="tip">（勾选并填筹码，点选我的座位与庄/盲位）</span></span></div>
+      <div class="group-title">本手庄位</div>
       <div id="tg-seats" class="tg-seats"></div>
 
+      <details class="setup-extras"><summary>更多设置</summary>
       <div class="setup-row">
         <span class="inline-label">决赛桌奖金 <span class="tip">（仅当本桌为决赛桌且含全部剩余选手时启用）</span></span>
         <input type="text" id="tg-payouts" placeholder="留空 = 不启用 ICM" aria-label="决赛桌奖金结构，逗号分隔">
@@ -83,10 +88,11 @@
       <div class="setup-row">
         <label class="switch-line"><input type="checkbox" id="tg-learning"> 熟人记牌（默认关闭；按手快照生效，历史数据保留）</label>
       </div>
+      </details>
 
       <div id="tg-preview" class="tg-preview" hidden></div>
       <div id="setup-error" class="form-error" role="alert"></div>
-      <button type="button" class="primary-btn" id="tg-create" data-action="create-table">生成位置预览</button>
+      <button type="button" class="primary-btn" id="tg-create" data-action="create-table">开始第 1 手</button>
       <button type="button" class="primary-btn" id="tg-confirm" data-action="confirm-table" hidden>确认建桌，开始第 1 手</button>
     </div>
 
@@ -145,6 +151,6 @@
 
 <div id="modal-root"></div>
 
-<script type="module" src="app.js?v=20260922e"></script>
+<script type="module" src="app.js?v=20260922f"></script>
 </body>
 </html>

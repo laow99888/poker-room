@@ -126,7 +126,7 @@ def _record_hand_locked(config, ops, names, intel, hero_index,
         user["_hand_ids"] = ids[-4000:]
 
     from .table import positions_for
-    positions = positions_for(int(config.get("player_count", 6)))
+    positions = config.get("range_positions") or positions_for(int(config.get("player_count", 6)))
 
     pool_pos = data.setdefault("_pool_pos", {})
     pool = data.setdefault(POOL, {"hands": 0, "vpip": 0, "pfr": 0, "threebet": 0})

@@ -1,0 +1,71 @@
+{
+  "generatedAt": "2026-09-18T19:38:30.122Z",
+  "node": "v24.19.0",
+  "scope": "Independent Node reproductions. VM controller probes are not browser tests. No server or real localStorage/statistics data accessed.",
+  "assertions": "Assertions intentionally confirm the reviewed defects, not product acceptance.",
+  "results": [
+    {
+      "id": "network-view",
+      "method": "real module + rejected fetch mock",
+      "pending": true,
+      "errorCallbacks": [],
+      "unhandledRejections": [
+        {
+          "name": "ReferenceError",
+          "message": "currentSource is not defined"
+        }
+      ],
+      "defectReproduced": true
+    },
+    {
+      "id": "network-advice",
+      "method": "real module + rejected fetch mock",
+      "pending": true,
+      "errorCallbacks": [],
+      "unhandledRejections": [
+        {
+          "name": "ReferenceError",
+          "message": "currentSource is not defined"
+        }
+      ],
+      "defectReproduced": true
+    },
+    {
+      "id": "save-failure-advances-hand",
+      "method": "production controller in Node VM; mocked prepare/save/render",
+      "phase": "ready",
+      "handNumber": 2,
+      "saveState": "error",
+      "saveAttempts": 1,
+      "statusMessage": "第 2 手开始，请选择本手底牌。",
+      "defectReproduced": true
+    },
+    {
+      "id": "conflict-does-not-block-write",
+      "method": "production persist() in Node VM; conflict flag set as storage listener does",
+      "conflict": true,
+      "saveAttempts": 1,
+      "defectReproduced": true
+    },
+    {
+      "id": "stale-commit-survives-replay",
+      "method": "production controller in Node VM; deferred prepare response + real replayHand",
+      "revisionBefore": 3,
+      "revisionAfterReplay": 4,
+      "resultingHandNumber": 2,
+      "resultingPhase": "ready",
+      "completedHands": 1,
+      "defectReproduced": true
+    },
+    {
+      "id": "duplicate-move-loses-participant",
+      "method": "real session.js functions; no mocks",
+      "acceptedMoves": 2,
+      "targetSeat": 6,
+      "activeOccupantsWithoutSeat": 1,
+      "chipsBefore": 50000,
+      "chipsAfter": 40000,
+      "defectReproduced": true
+    }
+  ]
+}

@@ -125,23 +125,31 @@ def validate_context(context: dict) -> dict:
         if order[0] != sb_seat or order[1] != bb_seat:
             raise _bad("盲位与物理顺序矛盾（SB 应为庄后首位，BB 次位）")
 
-    icm = context.get("icm") or {}
+    if sum(chips_by_occ.values()) > 2 ** 53 - 1:
+        raise _bad("全桌筹码总额超出安全整数")
+    icm = context.get("icm", {})
+    if not isinstance(icm, dict):
+        raise _bad("icm 必须为对象")
     scope = icm.get("scope", "off")
     payouts = icm.get("payouts", [])
+    if not isinstance(payouts, list):
+        raise _bad("payouts 必须为数组")
     if scope not in ("off", "final_table"):
         raise _bad(f"未知 ICM scope：{scope!r}")
     if scope == "final_table":
         if not isinstance(payouts, list) or not payouts or len(payouts) > n:
             raise _bad("ICM 奖金结构无效：名次数须在 1–入局人数")
         for p in payouts:
-            if not isinstance(p, (int, float)) or not math.isfinite(p) or p < 0:
+            if isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) or p < 0:
                 raise _bad(f"ICM 奖金须为非负有限数值：{p!r}")
+        if sum(payouts) <= 0 or payouts != sorted(payouts, reverse=True):
+            raise _bad("奖金须按名次递减且总额大于 0")
 
     learning = context.get("learning_enabled")
     if not isinstance(learning, bool):
         raise _bad("learning_enabled 必须为布尔值")
 
-    profile_names = context.get("profile_names") or {}
+    profile_names = context.get("profile_names", {})
     if not isinstance(profile_names, dict):
         raise _bad("profile_names 必须为对象")
     for occ, name in profile_names.items():

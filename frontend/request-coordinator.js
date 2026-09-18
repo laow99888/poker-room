@@ -61,6 +61,7 @@ export function createCoordinator(session, getHeaders = null) {
       viewReq = { id, source: sourceOf(session2), controller, state: "pending", payload: null };
       const captured = viewReq;
       (async () => {
+        let notifyDone = false;
         try {
           const res = await fetch("/api/hand/v2/view", {
             method: "POST",
@@ -70,23 +71,27 @@ export function createCoordinator(session, getHeaders = null) {
           });
           const body2 = await res.json();   // 正文读取后再守卫（S-07）
           if (captured !== viewReq || !stillCurrent(live, captured)) {
+            if (captured === viewReq) viewReq = null;
             if (hooks.onStale) hooks.onStale(body2);
             return;
           }
           captured.state = "done";
           captured.payload = body2;
           viewReq = null;
+          notifyDone = true;
           if (res.ok) {
             if (hooks.onAccept) hooks.onAccept(body2);
           } else if (hooks.onError) {
             hooks.onError(new Error(body2.detail || `HTTP ${res.status}`));
           }
         } catch (err) {
-          if (captured !== viewReq || !matches(currentSource, captured)) return;
+          if (captured !== viewReq) return;
           viewReq = null;
+          if (!stillCurrent(live, captured)) return;
+          notifyDone = true;
           if (hooks.onError) hooks.onError(err);
         } finally {
-          if (hooks.onDone) hooks.onDone();
+          if (notifyDone && !viewReq && hooks.onDone) hooks.onDone();
         }
       })();
       return id;
@@ -102,6 +107,7 @@ export function createCoordinator(session, getHeaders = null) {
       adviceReq = { id, source: sourceOf(session2), controller, state: "pending" };
       const captured = adviceReq;
       (async () => {
+        let notifyDone = false;
         try {
           const res = await fetch("/api/hand/v2/advice", {
             method: "POST",
@@ -111,21 +117,25 @@ export function createCoordinator(session, getHeaders = null) {
           });
           const body2 = await res.json();
           if (captured !== adviceReq || !stillCurrent(live, captured)) {
+            if (captured === adviceReq) adviceReq = null;
             if (hooks.onStale) hooks.onStale(body2);
             return;
           }
           adviceReq = null;
+          notifyDone = true;
           if (res.ok) {
             if (hooks.onResult) hooks.onResult(body2);
           } else if (hooks.onError) {
             hooks.onError(new Error(body2.detail || `HTTP ${res.status}`));
           }
         } catch (err) {
-          if (captured !== adviceReq || !matches(currentSource, captured)) return;
+          if (captured !== adviceReq) return;
           adviceReq = null;
+          if (!stillCurrent(live, captured)) return;
+          notifyDone = true;
           if (hooks.onError) hooks.onError(err);
         } finally {
-          if (hooks.onDone) hooks.onDone();
+          if (notifyDone && !adviceReq && hooks.onDone) hooks.onDone();
         }
       })();
       return id;
