@@ -3,127 +3,147 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>大魔丸 · 德州扑克 MTT 决策辅助</title>
+<title>大魔丸 · 锦标赛逐手记录与局面推演</title>
 <link rel="stylesheet" href="style.css?v=20260922d">
 </head>
 <body>
 <div class="felt-vignette" aria-hidden="true"></div>
 
-<header class="masthead">
-  <div class="masthead-rule" aria-hidden="true"></div>
-  <h1>大魔丸</h1>
-  <p class="sub">德州扑克 MTT 决策辅助 &mdash; 位置感知 · 蒙特卡洛 · 对手画像</p>
+<header class="session-bar" id="session-bar">
+  <div class="brand">大魔丸</div>
+  <div class="session-status" id="session-status">锦标赛逐手记录 · 位置与筹码追踪</div>
+  <div class="session-actions">
+    <span id="save-state" class="save-state" aria-live="polite"></span>
+    <span id="bar-main-slot"></span>
+  </div>
 </header>
 
-<main id="layout">
-  <!-- 左列：设置与牌库 -->
-  <section class="col" id="col-setup">
-    <div class="panel" id="setup" aria-label="牌局设置">
-      <div class="group-title">本手设置
-        <button type="button" class="btn-reopen" id="reopen" data-action="reopen" title="筹码恢复默认并全新开局">重开</button>
-      </div>
-
-      <div class="setup-row">
-        <label>桌型
-          <select id="cfg-size">
-            <option value="6" selected>6 人桌</option>
-            <option value="8">8 人桌</option>
-            <option value="9">9 人桌</option>
-          </select>
-        </label>
-        <label>我的位置
-          <select id="cfg-pos">
-            <option>UTG</option><option>HJ</option><option>CO</option>
-            <option>BTN</option><option>SB</option><option>BB</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="setup-row">
-        <label>小盲 <input type="number" id="cfg-sb" value="100" min="1"></label>
-        <label>大盲 <input type="number" id="cfg-bb" value="200" min="1"></label>
-        <label>前注 <input type="number" id="cfg-ante" value="25" min="0"></label>
-        <label>起始筹码 <input type="number" id="cfg-stack" value="10000" min="1"></label>
-      </div>
-
-      <div class="setup-row">
-        <span class="inline-label">决赛桌奖金 <span class="tip">（可选，逗号分隔，如 500,300,200）</span></span>
-        <input type="text" id="cfg-payouts" placeholder="留空 = 不启用 ICM" aria-label="决赛桌奖金结构，逗号分隔">
-      </div>
-
-      <div class="setup-row" id="stack-row">
-        <span class="inline-label">各座位筹码 <span class="tip">（可单独改）</span></span>
-      </div>
-      <div class="stack-grid" id="stack-grid"></div>
-
-      <div class="setup-row">
-        <span class="inline-label">对手代号 <span class="tip">（用于累计统计，可留空）</span></span>
-      </div>
-      <div class="stack-grid" id="names-grid"></div>
-
-      <div class="setup-row">
-        <span class="inline-label">我的底牌</span>
-        <div class="slots" id="hero-slots"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 中列：牌桌 -->
-  <section id="col-table">
+<main id="layout" data-phase="setup">
+  <!-- 牌桌列：进行中/结算时优先 -->
+  <section id="col-table" hidden>
     <div class="panel" id="table-panel" aria-label="牌桌">
+      <div class="table-caption" id="table-caption">
+        <span id="caption-hand"></span>
+        <span id="caption-save" class="save-state" aria-live="polite"></span>
+      </div>
+      <div class="table-subcaption" id="caption-seat"></div>
       <div id="table-oval">
         <div id="seat-layer"></div>
         <div id="table-logo" aria-hidden="true">♠ 大魔丸 ♠</div>
         <div id="table-center">
-          <div class="pot-line">底池 <b id="pot-num">0 BB</b></div>
+          <div class="pot-line">底池 <b id="pot-num">0</b></div>
           <div class="slots board" id="board-slots"></div>
           <div class="board-caption" id="street-caption"></div>
         </div>
       </div>
     </div>
 
-    <div class="panel" id="deck-panel" aria-label="牌库">
-      <div class="group-title">牌库 <span class="tip" id="deck-tip">（点选底牌与公共牌，灰牌已发出）</span></div>
+    <details class="panel" id="deck-panel" open aria-label="牌库">
+      <summary class="group-title">牌库 <span class="tip" id="deck-tip">（点选底牌与公共牌，灰牌已发出）</span></summary>
       <div id="card-grid"></div>
-    </div>
+    </details>
   </section>
 
-  <!-- 右列：操作台与建议 -->
-  <section class="col" id="col-right">
-    <div class="panel" id="console" aria-label="操作台">
-      <div class="group-title">操作台</div>
-      <p class="status-line" id="status-line" aria-live="polite">选好底牌后开始。</p>
+  <!-- 侧列：动作/推演/结算/设置 -->
+  <section id="col-side">
+
+    <!-- 建桌向导（setup 阶段） -->
+    <div class="panel" id="setup-panel" aria-label="新建牌桌">
+      <div class="group-title">新建锦标赛牌桌</div>
+
+      <div class="setup-row">
+        <label>座位容量
+          <select id="tg-capacity">
+            <option>2</option><option>3</option><option>4</option><option>5</option>
+            <option selected>6</option><option>7</option><option>8</option><option>9</option>
+          </select>
+        </label>
+        <label>盲注单位
+          <select id="tg-unit"><option value="bb" selected>BB 输入</option><option value="chips">筹码输入</option></select>
+        </label>
+      </div>
+
+      <div class="setup-row">
+        <label>小盲 <input type="number" id="tg-sb" value="100" min="1"></label>
+        <label>大盲 <input type="number" id="tg-bb" value="200" min="1"></label>
+        <label>每人前注 <input type="number" id="tg-ante" value="0" min="0"></label>
+        <label id="tg-default-wrap">统一初始 <input type="number" id="tg-default-chips" value="10000" min="1"></label>
+      </div>
+      <p class="footnote" id="tg-unit-hint">统一初始筹码仅作批量预填，可在下方逐座修改。</p>
+
+      <div class="setup-row"><span class="inline-label">有人座位与起始筹码 <span class="tip">（勾选并填筹码，点选我的座位与庄/盲位）</span></span></div>
+      <div id="tg-seats" class="tg-seats"></div>
+
+      <div class="setup-row">
+        <span class="inline-label">决赛桌奖金 <span class="tip">（仅当本桌为决赛桌且含全部剩余选手时启用）</span></span>
+        <input type="text" id="tg-payouts" placeholder="留空 = 不启用 ICM" aria-label="决赛桌奖金结构，逗号分隔">
+      </div>
+
+      <div class="setup-row">
+        <label class="switch-line"><input type="checkbox" id="tg-learning"> 熟人记牌（默认关闭；按手快照生效，历史数据保留）</label>
+      </div>
+
+      <div id="tg-preview" class="tg-preview" hidden></div>
+      <div id="setup-error" class="form-error" role="alert"></div>
+      <button type="button" class="primary-btn" id="tg-create" data-action="create-table">生成位置预览</button>
+      <button type="button" class="primary-btn" id="tg-confirm" data-action="confirm-table" hidden>确认建桌，开始第 1 手</button>
+    </div>
+
+    <!-- 录手/结算阶段：操作台 -->
+    <div class="panel" id="console" aria-label="操作台" hidden>
+      <div class="group-title" id="console-title">操作台</div>
+      <p class="status-line" id="status-line" aria-live="polite"></p>
+      <div id="settle-area" hidden></div>
       <div id="action-area"></div>
       <div id="ops-line" class="ops-line"></div>
     </div>
 
-    <div class="panel" id="advice-panel" aria-label="决策建议">
-      <div class="group-title">建议 <span class="tip" id="advice-note"></span></div>
-      <div id="advice" aria-live="polite"><p class="empty">轮到你行动时，这里给出胜率与赔率分析。</p></div>
+    <!-- 推演 -->
+    <div class="panel" id="advice-panel" aria-label="局面推演" hidden>
+      <div class="group-title">局面推演 <span class="tip" id="advice-note"></span></div>
+      <div id="advice" aria-live="polite"><p class="empty">轮到你行动时，这里给出与最新录入局面匹配的推演。</p></div>
       <div id="icm-panel" hidden></div>
     </div>
 
-    <div class="panel" id="learn-panel" aria-label="学习进度">
-      <div class="group-title">学习进度 <span class="tip">（打一手积累一手）</span>
-        <button type="button" class="ghost-btn" data-action="stats-reset" style="margin-left:auto">清空</button>
-      </div>
-      <div id="learn-line" aria-live="polite">—</div>
-    </div>
+    <!-- 下一手设置（settling 时展开） -->
+    <details class="panel" id="nextround-panel" hidden aria-label="下一手设置">
+      <summary class="group-title">下一手设置 <span class="tip">（盲注 / 成员 / 位置校准，确认后生效）</span></summary>
+      <div id="nextround-body"></div>
+    </details>
 
-    <div class="panel" id="help-panel" aria-label="说明">
-      <div class="group-title">玩法</div>
-      <p class="footnote">按座位顺序录入每一家的动作；有人全下后发完公共牌即自动摊牌分池，摊牌后亮出未弃牌玩家的底牌。
-      对手的牌进行中不可见——真实德扑也是如此；建议按对手的位置和动作自动估算范围（backend/data/charts.json 可调）。
-      所有金额以大盲（BB）为单位。</p>
-    </div>
+    <!-- 高级设置 -->
+    <details class="panel" id="advanced-panel" hidden aria-label="高级设置">
+      <summary class="group-title">更多设置</summary>
+      <div id="advanced-body">
+        <label class="switch-line"><input type="checkbox" id="tg-learning-switch"> 熟人记牌（对下一手生效；可随时关闭，历史数据保留）</label>
+        <p class="footnote">关闭时不读写任何对手统计，基础范围与推演不受影响。</p>
+      </div>
+    </details>
+
+    <!-- 历史 -->
+    <details class="panel" id="history-panel" hidden aria-label="本桌记录">
+      <summary class="group-title">本桌记录 <span class="tip" id="history-tip"></span></summary>
+      <div id="history-body"></div>
+    </details>
+
+    <!-- 帮助 -->
+    <details class="panel" id="help-panel" aria-label="说明">
+      <summary class="group-title">玩法</summary>
+      <div class="footnote">
+        <p>逐手录入牌桌上的实际动作；系统按已录入信息做位置感知的局面推演（范围、胜率、赔率均为基于假设范围的估算）。</p>
+        <p>对手底牌未录入时不会推断真实输赢：未知摊牌的手，请在结算页核对企业实际筹码后确认，模拟收益不会计入下一手。</p>
+        <p>每手结束可修改全桌最终实际余额；确认后自动轮转庄位并进入下一手。所有金额可同时以大盲（BB）与筹码显示。</p>
+      </div>
+    </details>
   </section>
 </main>
 
 <footer class="foot">
-  v2.3.0 · 仅供复盘、学习与研究 &mdash; 请勿在在线对局中作为实时辅助使用（各平台均视为作弊）。
+  仅供牌局记录、复盘、学习与研究 &mdash; 请勿在在线对局中作为实时辅助使用（各平台均视为作弊）。
 </footer>
 
-<script src="logic.js?v=20260921c"></script>
-<script src="app.js?v=20260921c"></script>
+<div id="modal-root"></div>
+
+<script type="module" src="app.js?v=20260922d"></script>
 </body>
 </html>

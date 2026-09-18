@@ -1,781 +1,1227 @@
-/* 大魔丸 · 6人桌 MTT 决策辅助（原生 JS，只与本机服务通信） */
+// 锦标赛连续牌桌 · 界面控制器（P3/P4）。
+// 领域迁移：session.js；持久化：session-storage.js；请求守卫：request-coordinator.js。
+// 本文件只做事件、渲染与调用编排（README 第 8 节职责）。
 "use strict";
 
+import {
+  createSession, chipsFromBB, chipsToBBText,
+  setHeroCards, pushOp, undoLastOp, replayHand, manualCloseHand,
+  enterSettling, cancelSettlement,
+  buildSettlementDraft, editSettlementRow, confirmAllCurrentValues,
+  validateSettlement, beginCommit, completeCommit,
+  emptyNextHandDraft, applyRosterEdit, applyDraftPositions, setDraftBlinds,
+  previewNextPositions, automaticNextPositions, rolesForSeat,
+  heroSeatOf, rangePositionFor, buildHandContext, DomainError,
+} from "./session.js";
+import * as Store from "./session-storage.js";
+import { createCoordinator } from "./request-coordinator.js";
+
+/* --------------------------------------------------------------- 基础工具 */
+
+const $ = (sel) => document.querySelector(sel);
 const RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"];
 const SUITS = ["s", "h", "d", "c"];
 const SUIT_GLYPH = { s: "♠", h: "♥", d: "♦", c: "♣" };
-const SUIT_NAME = { s: "黑桃", h: "红心", d: "方块", c: "梅花" };
 const IS_RED = { s: false, h: true, d: true, c: false };
-const POSITIONS_BY_SIZE = {
-  6: ["SB", "BB", "UTG", "HJ", "CO", "BTN"],
-  8: ["SB", "BB", "UTG", "UTG+1", "MP", "HJ", "CO", "BTN"],
-  9: ["SB", "BB", "UTG", "UTG+1", "UTG+2", "MP", "HJ", "CO", "BTN"],
-};
-const STREET_DEAL = { flop: 3, turn: 1, river: 1 };
-const STREET_LABEL = { flop: "翻牌", turn: "转牌", river: "河牌" };
-let ITERATIONS = 50000;
-function tuneIterations() {
-  // 模拟成本随人数线性涨：按桌型缩放，保证建议在几秒内返回
-  ITERATIONS = Math.max(10000, Math.round(170000 / state.config.player_count));
-}
+const STREET_DEAL = { preflop: 3, flop: 1, turn: 1 };
+const STREET_LABEL = { preflop: "翻牌前", flop: "翻牌", turn: "转牌", river: "河牌" };
 
-const CONFIG_KEY = "paishi_config_v2";   // v2：公开上线重置一次，回到默认 6 人桌
-const NAMES_KEY = "paishi_names_v1";
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fmtChips(n) { return Number(n).toLocaleString("zh-CN"); }
+function fmtNum(n) { return (Math.round((Number(n) || 0) * 10) / 10).toFixed(1); }
 
-function loadNames() {
-  try { return JSON.parse(localStorage.getItem(NAMES_KEY) || "{}"); }
-  catch (_) { return {}; }
-}
-function saveNames(d) {
-  try { localStorage.setItem(NAMES_KEY, JSON.stringify(d)); } catch (_) {}
-}
-function opponentName(pos) {
-  return loadNames()[`${state.config.player_count}:${pos}`] || "";
-}
-function setOpponentName(pos, name) {
-  const all = loadNames();
-  all[`${state.config.player_count}:${pos}`] = name;
-  saveNames(all);
-}
-function loadConfig() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "null");
-    if (saved && POSITIONS_BY_SIZE[saved.player_count] && saved.sb > 0 && saved.bb > 0) {
-      return saved;
-    }
-  } catch (_) { /* 忽略损坏的存档 */ }
-  return { player_count: 6, sb: 100, bb: 200, ante: 25, stack: 10000, stacks: null, payouts: [] };
-}
-function saveConfig() {
-  try { localStorage.setItem(CONFIG_KEY, JSON.stringify(state.config)); } catch (_) {}
-}
+/* ---------------------------------------------------------------- 运行时 */
 
-const state = {
-  config: loadConfig(),
-  heroPos: "BTN",
-  heroCards: [null, null],
-  ops: [],
-  handId: AppLogic.newHandId(),   // 14/29：初始化即有 ID，首手也能幂等去重
-  revision: 0,           // 36：单调版本号——任何状态变更递增，异步写回前校验
-  unconfirmed: false,    // 26：刚提交、服务端尚未确认的最后一跳操作
+const rt = {
+  session: null,
+  coord: null,
   view: null,
   advice: null,
-  gridMode: null,        // 'hero' | 'board'
+  adviceState: "idle",   // idle | pending | updated | failed
+  pendingOp: null,
+  gridMode: null,
+  heroPicks: [],
   boardPicks: [],
-  busy: false,
-  pending: null,
-  recorded: false,     // 本手是否已计入对手统计         // 忙碌期间用户点击的操作，处理完自动补上
-  error: null,           // 最近一次请求错误（界面优先显示，直到下一次成功）
+  saveState: "",
+  unit: "bb",
+  setup: { occupied: new Map(), heroSeatId: null, buttonSeatId: null, sbSeatId: null, bbSeatId: null },
+  setupPreview: null,
+  nextPositionsConfirmed: false,
+  advancedBound: false,
 };
 
-const $ = (sel) => document.querySelector(sel);
-const money = (n) => Number(n).toLocaleString("zh-CN");
-const bb = (chips) => (chips / state.config.bb).toFixed(1);          // 筹码 → BB 显示
-const bbToChips = (v) => Math.round(Number(v) * state.config.bb);    // BB 输入 → 筹码
+/* -------------------------------------------------------------- 启动恢复 */
 
-/* ---------- 牌面组件 ---------- */
-
-function cardBtn(card, disabled, label) {
-  const cls = `grid-card ${IS_RED[card[1]] ? "red" : "black"}`;
-  const dis = disabled ? "disabled" : "";
-  return `<button type="button" class="${cls}" ${dis} data-action="card"
-    data-card="${card}" aria-label="${label}">${card[0]}${SUIT_GLYPH[card[1]]}</button>`;
+function init() {
+  bindGlobal();
+  const loaded = Store.loadSession();
+  if (loaded.status === "ok") {
+    rt.session = loaded.session;
+    rt.coord = createCoordinator(rt.session);
+    rt.unit = rt.session.displayUnit || "bb";
+    resyncAll();
+    resumeIfPossible();
+    return;
+  }
+  showSetupWizard(loaded);
 }
 
-function renderGrid() {
-  const taken = new Set();
-  if (state.view) (state.view.taken || []).forEach((c) => taken.add(c));
-  state.heroCards.forEach((c) => c && taken.add(c));
-  const boardMode = state.gridMode === "board";
-  state.boardPicks.forEach((c) => taken.add(c));   // 已选入本街的牌同样灰掉
-  const html = SUITS.map((s) =>
-    RANKS.map((r) => {
-      const card = r + s;
-      if (!boardMode) return cardBtn(card, false, `选择 ${r}${SUIT_NAME[s]}`);
-      const picked = state.boardPicks.includes(card);
-      const cls = `grid-card ${IS_RED[card[1]] ? "red" : "black"}${picked ? " picked" : ""}`;
-      const dis = taken.has(card) && !picked ? "disabled" : "";
-      return `<button type="button" class="${cls}" ${dis} data-action="card"
-        data-card="${card}" aria-label="${picked ? "已选" : "选为公共牌"} ${r}${SUIT_NAME[s]}">${card[0]}${SUIT_GLYPH[card[1]]}</button>`;
-    }).join("")
-  ).join("");
-  $("#card-grid").innerHTML = html;
-}
-
-function updateDeckTip() {
-  const tip = $("#deck-tip");
-  if (!tip) return;
-  if (state.gridMode === "board" && state.view) {
-    const need = STREET_DEAL[state.view.street] || 0;
-    tip.textContent = `（点选 ${need} 张公共牌：已选 ${state.boardPicks.length}/${need}，金框为已选）`;
+function resumeIfPossible() {
+  const s = rt.session;
+  if (s.phase === "ended") { renderAll(); return; }
+  if (s.currentHand && s.currentHand.heroCards[0] && s.currentHand.heroCards[1]) {
+    renderAll();
+    refreshView();        // L-01：同一 handId/context/ops 重新回放；引擎无状态不重复扣盲
   } else {
-    tip.textContent = "（点选底牌与公共牌，灰牌已发出）";
+    renderAll();
   }
 }
 
-function renderHeroSlots() {
-  $("#hero-slots").innerHTML = state.heroCards.map((c, i) => {
-    const act = `data-action="hero-pick" data-idx="${i}"`;
-    if (c) {
-      const cls = `slot filled ${IS_RED[c[1]] ? "red" : "black"}`;
-      return `<button type="button" class="${cls}" ${act}
-        aria-label="清除 ${c[0]}${SUIT_NAME[c[1]]}"><span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span></button>`;
-    }
-    return `<button type="button" class="slot" ${act} aria-label="选择第 ${i + 1} 张底牌">+</button>`;
-  }).join("");
-}
-
-/* ---------- 牌桌与操作台 ---------- */
-
-function currentStacks() {
-  if (state.config.stacks && state.config.stacks.length === state.config.player_count) {
-    return [...state.config.stacks];
+function showSetupWizard(loaded) {
+  $("#layout").dataset.phase = "setup";
+  $("#col-table").hidden = true;
+  $("#console").hidden = true;
+  $("#advice-panel").hidden = true;
+  $("#advanced-panel").hidden = true;
+  $("#history-panel").hidden = true;
+  $("#nextround-panel").hidden = true;
+  $("#setup-panel").hidden = false;
+  if (loaded && (loaded.status === "corrupt" || loaded.status === "future")) {
+    setupError(loaded.status === "future"
+      ? "本地会话来自更新版本的 schema，已保留原文本，可导出后新建牌桌。"
+      : "本地会话数据损坏，已保留原文本，可导出后新建牌桌。");
+    const exportBtn = document.createElement("button");
+    exportBtn.type = "button";
+    exportBtn.className = "ghost-btn";
+    exportBtn.textContent = "导出原文本";
+    exportBtn.addEventListener("click", () => downloadRaw(loaded.raw || ""));
+    $("#tg-create").parentElement.insertBefore(exportBtn, $("#tg-create"));
   }
-  return Array(state.config.player_count).fill(state.config.stack);
-}
-
-function renderStackInputs() {
-  const names = POSITIONS_BY_SIZE[state.config.player_count];
-  const stacks = currentStacks();
-  const inputs = document.querySelectorAll('#stack-grid input[data-stack-idx]');
-  const unchanged = inputs.length === names.length &&
-    Array.from(inputs).every((el, i) => el.value === String(stacks[i]));
-  if (unchanged) return;   // 值一致就不动 DOM，避免打断编辑
-  $("#stack-grid").innerHTML = names.map((p, i) =>
-    `<label class="stack-cell">${p}<input type="number" min="1" data-stack-idx="${i}" value="${stacks[i]}" aria-label="${p} 筹码"></label>`).join("");
-}
-
-function seatXY(i, n) {
-  const angle = (90 + (i * 360) / n) * Math.PI / 180;  // BTN 在底部，按桌型均分
-  return { left: 50 + 40 * Math.cos(angle), top: 50 + 37 * Math.sin(angle) };
-}
-
-function renderSeats() {
-  const n = state.config.player_count;
-  const names = POSITIONS_BY_SIZE[n];
-  const layer = $("#seat-layer");
-  const seatsHtml = names.map((pos, i) => {
-    const xy = seatXY(i, n);
-    let inner = `<div class="pos-tag">${pos}</div>`;
-    let cls = "seat";
-    if (state.view) {
-      const seat = state.view.seats.find((s) => s.pos === pos);
-      if (seat) {
-        const acting = state.view.actor === pos;
-        const folded = !seat.in_hand && !state.view.hand_over;
-        const allin = seat.in_hand && seat.stack === 0;
-        const badges = [];
-        if (pos === "BTN") badges.push('<span class="chip chip-d">D</span>');
-        if (pos === "SB") badges.push('<span class="chip chip-sb">SB</span>');
-        if (pos === "BB") badges.push('<span class="chip chip-bb">BB</span>');
-        if (folded) badges.push('<span class="badge badge-fold">弃</span>');
-        if (allin) badges.push('<span class="badge badge-allin">全下</span>');
-        if (seat.bet > 0 && !folded) badges.push(`<span class="bet-chip">${bb(seat.bet)} BB</span>`);
-        const revealedCards = state.view.hand_over && state.view.revealed && state.view.revealed[pos];
-        const cardsHtml = seat.is_hero && state.heroCards[0]
-          ? `<div class="seat-cards">${state.heroCards.map((c) =>
-              `<span class="mini-card ${IS_RED[c[1]] ? "red" : ""}">${c[0]}${SUIT_GLYPH[c[1]]}</span>`).join("")}</div>`
-          : (revealedCards
-              ? `<div class="seat-cards" title="摊牌亮牌">${revealedCards.map((c) =>
-                  `<span class="mini-card ${IS_RED[c[1]] ? "red" : ""}">${c[0]}${SUIT_GLYPH[c[1]]}</span>`).join("")}</div>`
-              : "");
-        cls += `${acting ? " acting" : ""}${folded ? " folded" : ""}${seat.is_hero ? " hero" : ""}`;
-        inner = `<div class="pos-tag">${pos}${seat.is_hero ? " · 你" : ""}</div>
-          <div class="stack">${bb(seat.stack)}<small class="bb-tag"> BB</small></div>
-          <div class="badges">${badges.join("")}</div>${cardsHtml}`;
-      }
-    }
-    const xyStyle = state.view
-      ? `left:${xy.left.toFixed(1)}%;top:${xy.top.toFixed(1)}%;`
-      : `left:${xy.left.toFixed(1)}%;top:${xy.top.toFixed(1)}%;`;
-    return `<div class="${cls}" style="${xyStyle}">${inner}</div>`;
-  }).join("");
-  layer.innerHTML = seatsHtml;
-  $("#pot-num").textContent = state.view ? bb(state.view.pot) + " BB" : "0 BB";
-  $("#street-caption").textContent = state.view ? `阶段：${{ preflop: "翻牌前", flop: "翻牌", turn: "转牌", river: "河牌", over: "结束" }[state.view.street]}` : "";
-}
-
-function renderBoard() {
-  const board = state.view ? state.view.board : [];
-  const preview = board.concat(state.boardPicks);   // 选牌中的牌即时上桌预览
-  $("#board-slots").innerHTML = [0, 1, 2, 3, 4].map((i) => {
-    const c = preview[i];
-    if (c) {
-      const pending = i >= board.length ? " pending" : "";
-      return `<div class="slot filled ${IS_RED[c[1]] ? "red" : "black"} static${pending}"><span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span></div>`;
-    }
-    return '<div class="slot static" aria-hidden="true"></div>';
-  }).join("");
-}
-
-function renderConsole() {
-  const area = $("#action-area");
-  const line = $("#status-line");
-  line.classList.remove("err");
-  // 按下注轮分组展示：每条公共牌是一条轮次的分界
-  const STREETS = ["翻牌前", "翻牌", "转牌", "河牌"];
-  const fmtCard = (c) => `<b class="cb ${IS_RED[c[1]] ? "red" : "black"}">${c[0]}${SUIT_GLYPH[c[1]]}</b>`;
-  const rounds = [];
-  let chips = [];
-  let boardCount = 0;
-  let n = 0;
-  const flush = () => {
-    if (!chips.length) return;
-    rounds.push(`<div class="ops-round"><span class="round-tag">${STREETS[boardCount] || ""}</span>${chips.join("")}</div>`);
-    chips = [];
-  };
-  state.ops.forEach((op) => {
-    if (op.op === "board") {
-      flush();
-      rounds.push(`<div class="ops-board">${STREETS[boardCount + 1] || "公共牌"} ${op.cards.map(fmtCard).join(" ")}</div>`);
-      boardCount += 1;
-    } else {
-      n += 1;
-      const txt = { fold: "弃牌", check: "过牌", call: "跟注", raise: `加注到 ${bb(op.to || 0)} BB`, allin: "全下" }[op.type];
-      chips.push(`<span class="op-chip">${n}. ${op.seat} ${txt}</span>`);
-    }
-  });
-  flush();
-  $("#ops-line").innerHTML = rounds.join("") + (state.ops.length
-    ? `<button type="button" class="ghost-btn" data-action="undo">撤销上一步</button>`
-    : "");
-
-  // 26：错误优先渲染——失败后的重绘不得把状态行覆盖回"轮到XX"，
-  // 并提供同快照重试入口
-  if (state.error) {
-    line.textContent = state.error;
-    line.classList.add("err");
-    area.innerHTML = `
-      <button type="button" class="primary-btn" data-action="retry">重试</button>
-      ${state.ops.length ? `<button type="button" class="ghost-btn" data-action="undo">撤销上一步</button>` : ""}`;
-    return;
+  const legacy = Store.loadLegacyConfig();
+  if (legacy) {
+    $("#tg-sb").value = legacy.sb;
+    $("#tg-bb").value = legacy.bb;
+    $("#tg-ante").value = legacy.anteEach;
+    $("#tg-default-chips").value = legacy.defaultChips;
   }
-
-  if (!state.view) {
-    line.textContent = state.heroCards.every(Boolean)
-      ? "底牌已选好，正在请求本局数据…"
-      : "先点下方牌面网格，选你的 2 张底牌。";
-    area.innerHTML = "";
-    return;
-  }
-
-  if (state.view.hand_over) {
-    const pay = state.view.payoffs || {};
-    // 23：模拟牌局必须标明输赢来源——对手底牌是虚构占位，结果不是真实观察
-    line.textContent = "手牌结束 — " +
-      (state.view.simulated ? "对手底牌为模拟推演，以下盈亏仅供复盘参考：" : "各家盈亏：") +
-      (Object.entries(pay).map(([p, v]) => `${p} ${v > 0 ? "+" : ""}${money(v)}`).join("，") || "无变动");
-    area.innerHTML = `<button type="button" class="primary-btn" data-action="reset">再来一手</button>`;
-    return;
-  }
-
-  if (!state.view.actor) {
-    const n = STREET_DEAL[state.view.street];
-    const label = STREET_LABEL[state.view.street] || "公共牌";
-    line.textContent = `本轮下注结束，发${label}（${n} 张）`;
-    area.innerHTML = `<button type="button" class="ghost-btn" data-action="deal-toggle">
-        ${state.gridMode === "board" ? "收起牌面" : `发${label}`}</button>`;
-    return;
-  }
-
-  const isHero = state.view.actor === state.heroPos;
-  line.innerHTML = `轮到 <b>${state.view.actor}${isHero ? "（你）" : ""}</b>` +
-    (state.view.to_call > 0 ? ` · 需跟注 ${bb(state.view.to_call)} BB` : " · 无注");
-
-  const tc = state.view.to_call;
-  const dis = state.busy ? "disabled" : "";
-  const canRaise = state.view.min_raise_to != null && state.view.max_raise_to != null
-    && state.view.max_raise_to > state.view.to_call;
-  const clampTo = (chips) => Math.max(state.view.min_raise_to, Math.min(state.view.max_raise_to, chips));
-  const presets = {
-    min: state.view.min_raise_to,
-    half: clampTo(tc + Math.round(state.view.pot * 0.5)),
-    pot: clampTo(tc + state.view.pot),
-  };
-    const foldBtn = tc > 0
-    ? `<button type="button" class="act-btn fold" ${dis} data-action="do-fold">弃牌</button>`
-    : "";   // 面前无注时规则上不允许弃牌，只提供过牌/加注
-  const raiseBtns = canRaise ? `
-      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.min}" title="加注到最小加注额">加注 ${bb(presets.min)} BB</button>
-      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.half}" title="下注约半个底池">半池 ${bb(presets.half)} BB</button>
-      <button type="button" class="act-btn raise" ${dis} data-action="do-raise-to" data-to="${presets.pot}" title="下注约一个底池">满池 ${bb(presets.pot)} BB</button>` : "";
-  const raiseRow = canRaise ? `
-    <div class="raise-row">
-      <input type="number" id="raise-to" step="0.1" value="${bb(presets.min)}" min="${bb(state.view.min_raise_to)}" max="${bb(state.view.max_raise_to)}" aria-label="自定义加注到（BB），回车确认" ${dis}> BB
-      <button type="button" class="ghost-btn" ${dis} data-action="do-raise-input">按输入值加注（回车）</button>
-    </div>` : "";
-  const allinBtn = canRaise
-    ? `<button type="button" class="act-btn allin" ${dis} data-action="do-allin">全下 ${bb(state.view.max_raise_to)} BB</button>`
-    : "";   // 面对全下时全下≡跟注，隐藏以免误导（旧版此处渲染"全下 0.0 BB"）
-  area.innerHTML = `
-    <div class="action-row">
-      ${foldBtn}
-      <button type="button" class="act-btn call" ${dis} data-action="do-call">${tc > 0 ? `跟注 ${bb(tc)} BB` : "过牌"}</button>
-      ${raiseBtns}
-      ${allinBtn}
-    </div>
-    ${raiseRow}`;
+  renderSetupSeats();
 }
 
-async function refreshLearn() {
-  try {
-    const r = await fetch("/api/stats/summary/all", { headers: statsHeaders() });
-    const d = await r.json();
-    const posStr = Object.entries(d.pool || {}).map(([p, v]) => p + ":" + v.hands).join(" · ");
-    $("#learn-line").textContent =
-      "已积累 " + d.total_hands + " 手人群数据" + (posStr ? "（" + posStr + "）" : "") +
-      (Object.keys(d.named || {}).length ? " · 具名档案 " + Object.keys(d.named).length : "");
-  } catch (_) { /* 静默 */ }
+function downloadRaw(text) {
+  const blob = new Blob([text], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "paishi-session-backup.json";
+  a.click();
 }
 
-/* ---------- 建议面板 ---------- */
+/* ------------------------------------------------------------ 建桌向导 */
 
-function renderAdvice() {
-  const box = $("#advice");
-  const a = state.advice;
-  $("#advice-note").textContent = a ? "范围自动估算" : "";
-  if (!a) {
-    const heroActing = state.view && state.view.actor === state.heroPos && !state.view.hand_over;
-    box.innerHTML = heroActing
-      ? '<p class="empty">计算中…</p>'
-      : '<p class="empty">轮到你行动时，这里给出胜率与赔率分析。</p>';
-    return;
-  }
-  const eq = a.equity;
-  const rec = a.recommendation;
-  const mixHtml = (mix) => mix.map((m) => `
-    <div class="mix-row">
-      <span class="mix-label">${m.label}</span>
-      <span class="mix-bar" role="img" aria-label="${m.label} ${m.pct}%">
-        <i style="width:${Math.max(2, Math.min(100, m.pct))}%"></i>
+function renderSetupSeats() {
+  const capacity = Number($("#tg-capacity").value) || 6;
+  const wrap = $("#tg-seats");
+  const next = new Map();
+  for (const [k, v] of rt.setup.occupied) if (k <= capacity) next.set(k, v);
+  rt.setup.occupied = next;
+  const rows = [];
+  for (let sid = 1; sid <= capacity; sid++) {
+    const occ = next.get(sid);
+    rows.push(`<div class="tg-seat-row${occ ? " occupied" : ""}" data-seat="${sid}">
+      <label class="tg-occ"><input type="checkbox" data-role="occ" ${occ ? "checked" : ""}> ${sid}号座</label>
+      <input type="text" data-role="name" class="tg-name" placeholder="代号（可选）" value="${esc(occ?.name || "")}" ${occ ? "" : "disabled"}>
+      <input type="number" data-role="chips" class="tg-chips" min="1" placeholder="筹码" value="${occ ? esc(occ.chips ?? "") : ""}" ${occ ? "" : "disabled"}>
+      <span class="tg-seat-tags">
+        <button type="button" class="tag-btn" data-role="hero" title="我的座位">你</button>
+        <button type="button" class="tag-btn" data-role="btn" title="庄位">BTN</button>
+        <button type="button" class="tag-btn" data-role="sb" title="小盲">SB</button>
+        <button type="button" class="tag-btn" data-role="bb" title="大盲">BB</button>
       </span>
-      <span class="mix-pct">${m.pct}%</span>
-    </div>`).join("");
-  const recHtml = `
-    <div class="rec-box">
-      <div class="rec-title">行动建议（启发式）</div>
-      <div class="rec-primary">${rec.primary}</div>
-      ${mixHtml(rec.mix)}
-      <p class="rec-reason">${rec.reason}</p>
-    </div>`;
-  let cfrHtml = "";
-  const c = a.cfr;
-  if (c && c.supported) {
-    cfrHtml = `
-      <div class="cfr-box">
-        <div class="cfr-title">第三层 · CFR 均衡参考
-          <span class="cfr-meta">${c.street || "河牌"}${c.approximate ? "（近似）" : ""} · ${c.iterations} 次迭代 · ${c.hero_range_combos}×${c.villain_range_combos} 组合${c.range_capped ? "（已抽样）" : ""}</span>
-        </div>
-        ${mixHtml(c.mix)}
-        <p class="cfr-note">你的手牌相对对手范围权益约 ${c.equity_vs_range}%（${c.buckets} 桶抽象）。${c.agree ? "与启发式方向一致。" : "与启发式主建议方向不同：此处是范围层面的均衡频率，供交叉参考。"}</p>
-      </div>`;
-  } else if (c && !c.supported && c.reason && !c.reason.includes("河牌")) {
-    cfrHtml = `<p class="footnote">CFR 参考：${c.reason}</p>`;
+    </div>`);
   }
-  box.innerHTML = `
-    <div class="big">${eq.win.toFixed(1)}<small> % 胜率（含平 ${eq.tie.toFixed(1)}%）</small></div>
-    <div class="bar" role="img" aria-label="胜 ${eq.win}% 平 ${eq.tie}% 负 ${eq.lose}%">
-      <i class="w" style="width:${eq.win}%"></i><i class="t" style="width:${eq.tie}%"></i><i class="l" style="width:${eq.lose}%"></i>
-    </div>
-    ${recHtml}
-    <table class="adv-table">
-      <tr><td>需跟注</td><td>${a.to_call > 0 ? bb(a.to_call) + " BB" : "0（可过牌）"}</td></tr>
-      <tr><td>跟注所需胜率</td><td>${a.required_eq}%</td></tr>
-      <tr><td>你的权益</td><td>${(a.equity_share ?? eq.win + eq.tie / 2).toFixed(1)}%（可争夺份额）</td></tr>
-      <tr><td>跟注 EV</td><td class="${a.ev_call >= 0 ? "pos" : "neg"}">${a.ev_call >= 0 ? "+" : ""}${bb(a.ev_call)} BB</td></tr>
-      <tr><td>SPR</td><td>${rec.spr ?? "—"}${rec.spr_note ? " · " + rec.spr_note : ""}</td></tr>
-      <tr><td>M 值</td><td>${(a.m_value !== null && a.m_value !== undefined) ? a.m_value : "—"}</td></tr>
-    </table>
-    <div class="range-list">${a.opponents.map((o) => {
-      const safeName = o.name ? AppLogic.escapeHtml(o.name) : "";
-      const name = o.name ? `<b>${safeName}</b>（${o.pos}）` : `<b>${o.pos}</b>`;
-      const stat = o.stats && o.stats.hands >= 5
-        ? ` · VPIP ${o.stats.vpip_pct}% / PFR ${o.stats.pfr_pct}%` : "";
-      const narrow = o.narrowed ? " · 范围已按 PFR 收窄" : "";
-      return `<div class="range-item">${name}：${o.situation} · ${o.combos} 组合${stat}${narrow} · 剩余 ${bb(o.stack)} BB</div>`;
-    }).join("")}</div>
-    ${cfrHtml}
-    <p class="footnote">${a.note} · 模拟 ${money(eq.iterations)} 手 · ${eq.elapsedMs} ms</p>`;
-}
-
-function commitRaiseInput() {
-  if (!state.view || state.view.actor == null) return;
-  const to = clampToChips(Number($("#raise-to").value));
-  pushOp({ op: "action", type: "raise", to, seat: state.view.actor });
-}
-
-function clampToChips(v) {
-  const lo = state.view.min_raise_to, hi = state.view.max_raise_to;
-  return Math.max(lo, Math.min(hi, bbToChips(v)));
-}
-
-document.addEventListener("keydown", (ev) => {
-  if (ev.key === "Enter" && ev.target && ev.target.id === "raise-to") {
-    ev.preventDefault();
-    commitRaiseInput();
+  wrap.innerHTML = rows.join("");
+  for (const row of wrap.querySelectorAll(".tg-seat-row")) {
+    const sid = Number(row.dataset.seat);
+    row.querySelector('[data-role="occ"]').addEventListener("change", (e) => {
+      const chipsInput = row.querySelector('[data-role="chips"]');
+      const nameInput = row.querySelector('[data-role="name"]');
+      if (e.target.checked) {
+        const def = Number($("#tg-default-chips").value) || 10000;
+        chipsInput.value = String(def);
+        next.set(sid, { chips: def, name: "" });
+        chipsInput.disabled = false; nameInput.disabled = false;
+      } else {
+        next.delete(sid);
+        chipsInput.disabled = true; nameInput.disabled = true;
+        for (const key of ["heroSeatId", "buttonSeatId", "sbSeatId", "bbSeatId"]) {
+          if (rt.setup[key] === sid) rt.setup[key] = null;
+        }
+      }
+      markSeatTags(row, sid);
+    });
+    row.querySelector('[data-role="chips"]').addEventListener("input", (e) => {
+      const cur = next.get(sid);
+      if (cur) cur.chips = e.target.value === "" ? null : Number(e.target.value);
+    });
+    row.querySelector('[data-role="name"]').addEventListener("input", (e) => {
+      const cur = next.get(sid);
+      if (cur) cur.name = e.target.value;
+    });
+    for (const role of ["hero", "btn", "sb", "bb"]) {
+      row.querySelector(`[data-role="${role}"]`).addEventListener("click", () => {
+        if (!next.has(sid)) return;
+        const key = `${role}SeatId`;
+        rt.setup[key] = rt.setup[key] === sid ? null : sid;
+        wrap.querySelectorAll(".tg-seat-row").forEach((r) => markSeatTags(r, Number(r.dataset.seat)));
+      });
+    }
   }
-});
+  wrap.querySelectorAll(".tg-seat-row").forEach((r) => markSeatTags(r, Number(r.dataset.seat)));
+}
 
-/* ---------- 与服务端交互 ---------- */
+function markSeatTags(row, sid) {
+  row.querySelector('[data-role="hero"]').classList.toggle("picked", rt.setup.heroSeatId === sid);
+  row.querySelector('[data-role="btn"]').classList.toggle("picked", rt.setup.buttonSeatId === sid);
+  row.querySelector('[data-role="sb"]').classList.toggle("picked", rt.setup.sbSeatId === sid);
+  row.querySelector('[data-role="bb"]').classList.toggle("picked", rt.setup.bbSeatId === sid);
+  row.classList.toggle("occupied", rt.setup.occupied.has(sid));
+}
 
-function payload() {
+function setupError(msg) {
+  const el = $("#setup-error");
+  el.textContent = msg || "";
+  el.hidden = !msg;
+}
+
+function collectSetup() {
+  const bb = Number($("#tg-bb").value);
+  const entries = [];
+  for (const [sid, occ] of rt.setup.occupied) {
+    if (occ.chips == null || !Number.isSafeInteger(occ.chips) || occ.chips <= 0) {
+      throw new DomainError("bad_chips", `${sid}号座筹码无效`);
+    }
+    entries.push({ seatId: sid, chips: occ.chips, name: occ.name || null });
+  }
   return {
-    config: { player_count: state.config.player_count, sb: state.config.sb, bb: state.config.bb, ante: state.config.ante,
-              stacks: currentStacks(), payouts: state.config.payouts || [] },
-    hero_pos: state.heroPos,
-    hero_cards: state.heroCards,
-    ops: state.ops,
-    hand_id: state.handId,
-    iterations: ITERATIONS,
-    names: Object.fromEntries(
-      POSITIONS_BY_SIZE[state.config.player_count]
-        .map((p) => [p, opponentName(p)])
-    ),
+    capacity: Number($("#tg-capacity").value),
+    entries,
+    heroSeatId: rt.setup.heroSeatId,
+    buttonSeatId: rt.setup.buttonSeatId,
+    sbSeatId: rt.setup.sbSeatId,
+    bbSeatId: rt.setup.bbSeatId,
+    blindLevel: { sb: Number($("#tg-sb").value), bb, anteEach: Number($("#tg-ante").value) || 0 },
+    learningEnabled: $("#tg-learning").checked,
+    icm: parsePayouts($("#tg-payouts").value),
   };
 }
 
-function showError(msg) {
-  state.error = msg;
-  const line = $("#status-line");
-  line.classList.add("err");
-  const hint = "（可点「撤销上一步」回退）";
-  line.textContent = msg.includes(hint) ? msg : msg + hint;
-}
-
-function pushOp(op) {
-  if (state.busy) { state.pending = op; return; }          // 忙碌：暂存，处理完自动补上
-  if (op.op === "action") {
-    if (!state.view || state.view.hand_over || state.view.actor !== op.seat) return;  // 行动者校验
+function parsePayouts(text) {
+  const t = String(text || "").trim();
+  if (!t) return { scope: "off", payouts: [], rosterConfirmed: false };
+  const arr = t.split(/[，,]/).map((x) => Number(x.trim()));
+  if (!arr.length || arr.some((x) => !Number.isFinite(x) || x < 0)) {
+    throw new DomainError("bad_icm", "奖金结构须为逗号分隔的非负数");
   }
-  if (op.op === "board" && state.view && state.view.actor) return;
-  state.error = null;
-  state.revision += 1;       // 36：动作变更递增版本，等长分支也能区分先后
-  state.ops.push(op);
-  state.unconfirmed = true;  // 26：这一跳刚提交、尚未被服务端确认
-  state.busy = true;         // 点击即刻禁用操作按钮，不等网络返回（防连点）
-  renderConsole();
-  refreshCore();
+  return { scope: "final_table", payouts: arr, rosterConfirmed: true };
 }
 
-// 27：学习数据请求统一携带匿名用户 ID
-function statsHeaders() {
-  return { "X-Player-Id": AppLogic.playerId() };
-}
-
-async function refresh(retries = 0) {
-  if (!state.heroCards.every(Boolean)) { renderAll(); return; }
-  if (state.busy) return;                    // 防重入
-  state.busy = true;
-  return refreshCore(retries);
-}
-
-async function refreshCore(retries = 0) {
-  // 25：代次守卫——请求发出后只要重开/换了手牌（handId 变化），
-  // 本次响应无论成败都不得写入状态，也不得触动 busy/pending
-  const hid = state.handId;
-  const rev = state.revision;   // 36：动作/撤销/配置变化都会推进版本
-  const stale = () => state.handId !== hid || state.revision !== rev;
+function onPreviewTable() {
+  setupError("");
+  let session;
   try {
-    const r = await fetch("/api/hand/view", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload()),
-    });
-    if (stale()) return;
-    const data = await r.json();
-    if (stale()) return;   // 36：响应体读取完成后再检——等待正文期间重开/换位也作废
-    if (!r.ok) {
-      // 26：只回滚"刚提交、未被确认"的最后一步（400 也可能源于配置或
-      // 更早的步骤，绝不允许猜测性连环删除合法历史）
-      if (AppLogic.shouldRollbackOn(r.status) && state.unconfirmed
-          && state.ops.length > 0) {
-        state.unconfirmed = false;
-        state.ops.pop();
-        state.busy = false;
-        showError((data.detail || `最后一步无效，已撤销`) + "（可修正后重试）");
-        renderAll();
-        return refreshCore(1);   // 恢复到撤销后的合法视图；再次失败不再回滚
-      }
-      showError(r.status === 400
-        ? ((data.detail || `请求失败（${r.status}）`) + "（可点「撤销上一步」回退）")
-        : `服务暂不可用（${r.status}）——你的操作记录已保留，稍后重试即可`);
-      state.busy = false;
+    session = createSession(collectSetup());
+  } catch (e) {
+    setupError(e.message);
+    return;
+  }
+  rt.setupPreview = session;
+  const preview = $("#tg-preview");
+  preview.hidden = false;
+  const rows = session.seats.filter((x) => x.occupantId).map((x) => {
+    const occ = session.occupants[x.occupantId];
+    return `<tr><td>${x.id}号座</td><td>${esc(occ.profileName || "—")}${x.occupantId === session.heroOccupantId ? " · 你" : ""}</td>
+      <td>${chipsToBBText(occ.confirmedChips, session.blindLevel.bb)}BB / ${fmtChips(occ.confirmedChips)}</td>
+      <td>${esc(rolesForSeat(session, x.id).join("/") || rangePositionFor(session, x.id) || "")}</td></tr>`;
+  });
+  const p = session.positions;
+  preview.innerHTML = `<table class="adv-table"><thead><tr><th>座位</th><th>玩家</th><th>筹码</th><th>角色</th></tr></thead>
+    <tbody>${rows.join("")}</tbody></table>
+    <p class="footnote">BTN ${p.buttonSeatId}号座 · SB ${p.smallBlindSeatId ?? "空"} · BB ${p.bigBlindSeatId}号座。
+    确认后从第 1 手开始；熟人记牌默认关闭，可在“更多设置”按手调整。</p>`;
+  $("#tg-confirm").hidden = false;
+  $("#tg-create").textContent = "重新生成预览";
+}
+
+async function onConfirmTable() {
+  setupError("");
+  const btn = $("#tg-confirm");
+  btn.disabled = true;
+  try {
+    const session = rt.setupPreview || createSession(collectSetup());
+    await prepareContext(session, session.currentHand.handId, 1);   // A03：后端验证后才开始
+    rt.session = session;
+    rt.coord = createCoordinator(session);
+    rt.unit = "bb";
+    persist();
+    renderAll();
+  } catch (e) {
+    setupError(`建桌失败：${e.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function prepareContext(session, handId, handNumber) {
+  const hand = session.currentHand;
+  return prepareRaw({
+    protocol_version: 2,
+    hand_id: handId || hand.handId,
+    hand_number: handNumber || hand.handNumber,
+    context: hand ? hand.context : buildHandContext(session, handNumber || 1),
+  });
+}
+
+async function prepareRaw(body) {
+  const res = await fetch("/api/table/prepare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+/* ------------------------------------------------------------- 保存状态 */
+
+function persist() {
+  if (!rt.session) return;
+  const r = Store.saveSession(rt.session);
+  rt.saveState = r.ok ? "saved" : "error";
+  setSaveLabel();
+}
+
+function setSaveLabel() {
+  const label = rt.saveState === "saved" ? "已保存"
+    : rt.saveState === "error" ? "保存失败（数据仅在本页）" : "";
+  for (const el of [$("#save-state"), $("#caption-save")]) if (el) el.textContent = label;
+}
+
+/* ------------------------------------------------------------ 每手流程 */
+
+function viewPayload(ops) {
+  const hand = rt.session.currentHand;
+  return {
+    protocol_version: 2,
+    hand_id: hand.handId,
+    context: hand.context,
+    hero_cards: hand.heroCards,
+    ops,
+    iterations: 20000,
+  };
+}
+
+function refreshView() {
+  rt.coord.resync(rt.session);
+  rt.coord.submitView(rt.session, viewPayload(rt.session.currentHand.ops), {
+    onAccept(body) {
+      rt.view = body;
+      rt.advice = null;
+      rt.adviceState = "idle";
+      if (rt.session.phase === "ready") rt.session.phase = "playing";
+      if (body.hand_over && rt.session.phase === "playing") enterSettlePhase(body);
       renderAll();
-      return;
-    }
-    state.error = null;
-    state.unconfirmed = false;
-    state.view = data;
-    state.advice = null;
-    state.busy = false;
-    if (data.hand_over && !state.recorded) {
-      // 04/22：记录确认绑定本手 handId——迟到的 200 不得把新手标为已记录
-      fetch("/api/stats/record", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...statsHeaders() },
-        body: JSON.stringify(payload()),
-      }).then((rr) => {
-        if (state.handId !== hid) return;   // 40：旧手的任何结果不写入新一手
-        if (!rr.ok) {
-          showError("学习数据记录失败（服务未确认），本手可能未计入统计");
+      maybeAdvice();
+    },
+    onError(err) {
+      setStatus(`局面更新失败：${err.message}`);
+      renderConsole();
+    },
+  });
+  renderAll();
+}
+
+function submitAction(op) {
+  if (rt.coord.viewPending()) return;          // S04.1：不排队第二个未验证动作
+  const hand = rt.session.currentHand;
+  rt.pendingOp = op;
+  rt.coord.invalidateAdvice();                 // S04.3：旧推演立刻失效
+  rt.advice = null;
+  rt.adviceState = "idle";
+  rt.coord.submitView(rt.session, viewPayload([...hand.ops, op]), {
+    onAccept(body) {
+      pushOp(rt.session, op);                  // 验证通过才落地（revision 推进）
+      rt.view = body;
+      rt.pendingOp = null;
+      persist();
+      if (body.hand_over) enterSettlePhase(body);
+      else maybeAdvice();
+      renderAll();
+    },
+    onError(err) {
+      rt.pendingOp = null;                     // 待确认动作从未落地（S-13）
+      setStatus(`动作未被接受：${err.message}`);
+      renderAll();
+    },
+  });
+  renderAll();
+}
+
+function onUndo() {
+  rt.coord.invalidateAdvice();
+  undoLastOp(rt.session);
+  rt.view = null;
+  rt.advice = null;
+  rt.adviceState = "idle";
+  persist();
+  refreshView();
+}
+
+function onReplayHand() {
+  if (!window.confirm("重录本手？动作与底牌清空；庄位、手数与已确认余额不变。")) return;
+  replayHand(rt.session);
+  rt.view = null;
+  rt.advice = null;
+  rt.adviceState = "idle";
+  rt.heroPicks = [];
+  rt.boardPicks = [];
+  rt.gridMode = null;
+  persist();
+  renderAll();
+}
+
+function onManualClose() {
+  const reason = window.prompt("说明本手记录不完整的原因（将随本手保存）：");
+  if (reason === null) return;
+  try {
+    manualCloseHand(rt.session, reason);
+  } catch (e) {
+    setStatus(e.message);
+    return;
+  }
+  persist();
+  renderAll();
+}
+
+function enterSettlePhase(view) {
+  try {
+    enterSettling(rt.session, view ? view.settlement_preview.rows : []);
+  } catch (e) {
+    setStatus(e.message);
+    return;
+  }
+  rt.nextPositionsConfirmed = false;
+  if (!rt.session.nextHandDraft) {
+    rt.session.nextHandDraft = emptyNextHandDraft(rt.session);
+  }
+  persist();
+  renderAll();
+}
+
+/* ------------------------------------------------------------- 结算流程 */
+
+function renderSettle() {
+  const area = $("#settle-area");
+  const s = rt.session;
+  if (s.phase !== "settling" || !s.settlementDraft) {
+    area.hidden = true;
+    return;
+  }
+  area.hidden = false;
+  const draft = s.settlementDraft;
+  const hand = s.currentHand;
+  const v = validateSettlement(s, draft);
+  const rows = draft.rows.map((row) => {
+    const part = hand.context.participants.find((p) => p.seat_id === row.seatId);
+    const occ = s.occupants[row.occupantId];
+    const isHero = row.occupantId === s.heroOccupantId;
+    const val = row.finalChips === null ? "" : String(row.finalChips);
+    const srcTag = row.source === "unknown" ? '<span class="src-tag warn">待核对</span>'
+      : row.source === "manual" ? '<span class="src-tag">手工</span>'
+      : '<span class="src-tag ok">已核对</span>';
+    return `<tr data-seat="${row.seatId}">
+      <td>${row.seatId}号座${isHero ? " · 你" : ""}</td>
+      <td>${esc(occ?.profileName || "—")}</td>
+      <td>${fmtChips(part.starting_chips)}</td>
+      <td>${srcTag}</td>
+      <td><input type="number" inputmode="numeric" class="settle-input" data-seat="${row.seatId}"
+           value="${val}" placeholder="最终余额" aria-label="${row.seatId}号座最终实际余额"></td>
+      <td>${row.finalChips === null ? "—" : chipsToBBText(row.finalChips, s.blindLevel.bb) + "BB"}</td>
+    </tr>`;
+  }).join("");
+  const deltaLine = v.delta === 0
+    ? `<span class="src-tag ok">总额守恒 ${fmtChips(v.finalSum)}</span>`
+    : `<span class="src-tag warn">差额 ${v.delta > 0 ? "+" : ""}${fmtChips(v.delta)}（手前 ${fmtChips(v.startingSum)} → 填写 ${fmtChips(v.finalSum)}）</span>`;
+  area.innerHTML = `
+    <div class="group-title">核对本手结束筹码 <span class="tip">第 ${hand.handNumber} 手 · BB 换算按 ${s.blindLevel.bb}</span></div>
+    <div class="settle-scroll"><table class="adv-table settle-table">
+      <thead><tr><th>座位</th><th>玩家</th><th>手前</th><th>来源</th><th>手后实际余额</th><th>BB</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div class="settle-tools">
+      <button type="button" class="ghost-btn" data-action="confirm-current">确认当前填写值</button>
+      ${deltaLine}
+    </div>
+    <div class="setup-row" id="settle-diff-row" ${v.delta === 0 ? "hidden" : ""}>
+      <input type="text" id="settle-reason" placeholder="差额原因（现场漏记/初始录错等）" value="${esc(draft.adjustmentReason || "")}">
+      <label class="switch-line"><input type="checkbox" id="settle-accept" ${draft.differenceAccepted ? "checked" : ""}> 我确认该差额</label>
+    </div>
+    <div id="roster-area"></div>
+    <p class="form-error" id="settle-error" role="alert" hidden></p>
+    <div class="settle-actions">
+      <button type="button" class="primary-btn" id="settle-commit" data-action="settle-commit">确认余额，进入下一手</button>
+      <button type="button" class="ghost-btn" data-action="settle-cancel">取消，继续纠正本手</button>
+    </div>`;
+  bindSettleEvents(area);
+  renderRosterEditor(area.querySelector("#roster-area"));
+}
+
+function bindSettleEvents(area) {
+  for (const input of area.querySelectorAll(".settle-input")) {
+    input.addEventListener("change", (e) => {
+      const seatId = Number(e.target.dataset.seat);
+      const draft = rt.session.settlementDraft;
+      if (e.target.value === "") { editSettlementRow(draft, seatId, null); }
+      else {
+        const n = Number(e.target.value);
+        if (!Number.isSafeInteger(n) || n < 0) {
+          showSettleError(`${seatId}号座余额必须为非负整数`);
           return;
         }
-        state.recorded = true;
-        refreshLearn();
-      }).catch(() => {
-        if (state.handId === hid) {
-          showError("学习数据记录失败（网络异常），本手可能未计入统计");
-        }
-      });
+        editSettlementRow(draft, seatId, n, "manual");
+      }
+      persist();
+      renderSettle();
+    });
+  }
+  area.querySelector('[data-action="confirm-current"]')?.addEventListener("click", () => {
+    confirmAllCurrentValues(rt.session.settlementDraft);
+    persist();
+    renderSettle();
+  });
+  area.querySelector("#settle-reason")?.addEventListener("input", (e) => {
+    rt.session.settlementDraft.adjustmentReason = e.target.value;
+  });
+  area.querySelector("#settle-accept")?.addEventListener("change", (e) => {
+    rt.session.settlementDraft.differenceAccepted = e.target.checked;
+  });
+  area.querySelector('[data-action="settle-cancel"]')?.addEventListener("click", () => {
+    cancelSettlement(rt.session);
+    rt.view = null;
+    persist();
+    refreshView();
+  });
+  area.querySelector("#settle-commit")?.addEventListener("click", () => commitSettlement(area));
+}
+
+function showSettleError(msg) {
+  const el = $("#settle-error");
+  if (el) { el.textContent = msg || ""; el.hidden = !msg; }
+}
+
+function renderRosterEditor(container) {
+  const s = rt.session;
+  const html = `
+    <div class="group-title">下一手成员 <span class="tip">（离桌/入座/换座；先填好本手余额）</span></div>
+    <div class="tg-seats" id="roster-rows">${s.seats.map((seat) => {
+      const occ = seat.occupantId ? s.occupants[seat.occupantId] : null;
+      if (!occ || occ.status !== "active") {
+        return `<div class="tg-seat-row" data-seat="${seat.id}">
+          <span class="inline-label">${seat.id}号座 · 空位</span>
+          <input type="number" class="roster-enter-chips" data-seat="${seat.id}" placeholder="新玩家筹码" min="1">
+          <input type="text" class="roster-enter-name" data-seat="${seat.id}" placeholder="代号（可选）">
+          <button type="button" class="ghost-btn roster-enter" data-seat="${seat.id}">入座</button>
+        </div>`;
+      }
+      const isHero = occ.id === s.heroOccupantId;
+      return `<div class="tg-seat-row occupied" data-seat="${seat.id}">
+        <span class="inline-label">${seat.id}号座 · ${esc(occ.profileName || "玩家")}${isHero ? " · 你" : ""} · ${fmtChips(occ.confirmedChips)}</span>
+        <button type="button" class="ghost-btn roster-leave" data-occ="${occ.id}">离桌/淘汰</button>
+        ${isHero ? "" : `<button type="button" class="ghost-btn roster-move" data-occ="${occ.id}">移到空座</button>`}
+      </div>`;
+    }).join("")}</div>
+    <div id="position-preview"></div>`;
+  container.innerHTML = html;
+  for (const btn of container.querySelectorAll(".roster-enter")) {
+    btn.addEventListener("click", () => {
+      const seatId = Number(btn.dataset.seat);
+      const chips = Number(container.querySelector(`.roster-enter-chips[data-seat="${seatId}"]`).value);
+      const name = container.querySelector(`.roster-enter-name[data-seat="${seatId}"]`).value;
+      try {
+        applyRosterEdit(s, s.nextHandDraft, { type: "enter", seatId, chips, name });
+      } catch (e) { showSettleError(e.message); return; }
+      renderRosterEditor(container);
+    });
+  }
+  for (const btn of container.querySelectorAll(".roster-leave")) {
+    btn.addEventListener("click", () => {
+      const occId = btn.dataset.occ;
+      const zero = s.settlementDraft.rows.find((r) => r.occupantId === occId)?.finalChips === 0;
+      const reason = window.prompt(zero ? "该玩家最终余额为 0，确认按淘汰处理？" : "离桌原因：table_transfer（转桌）/ eliminated（淘汰）", zero ? "eliminated" : "table_transfer");
+      if (!reason) return;
+      try {
+        applyRosterEdit(s, s.nextHandDraft, { type: "leave", occupantId: occId, reason: reason.trim() });
+      } catch (e) { showSettleError(e.message); return; }
+      renderRosterEditor(container);
+    });
+  }
+  for (const btn of container.querySelectorAll(".roster-move")) {
+    btn.addEventListener("click", () => {
+      const occId = btn.dataset.occ;
+      const target = window.prompt("移动到哪个空座位号？");
+      if (!target) return;
+      try {
+        applyRosterEdit(s, s.nextHandDraft, { type: "move", occupantId: occId, targetSeatId: Number(target) });
+      } catch (e) { showSettleError(e.message); return; }
+      renderRosterEditor(container);
+    });
+  }
+  renderPositionPreview(container.querySelector("#position-preview"));
+}
+
+function renderPositionPreview(container) {
+  const s = rt.session;
+  const edits = s.nextHandDraft ? s.nextHandDraft.rosterEdits : [];
+  const rosterChanged = edits.length > 0;
+  const preview = rosterChanged ? previewNextPositions(s, edits) : automaticNextPositions(s);
+  if (rosterChanged && !rt.nextPositionsConfirmed) {
+    container.innerHTML = `<div class="group-title">下一手位置预览 <span class="tip">（名单变化，需确认）</span></div>
+      <p class="footnote">候选：BTN ${preview.buttonSeatId ?? "空"}号座 · SB ${preview.smallBlindSeatId ?? "空"} · BB ${preview.bigBlindSeatId}号座。与现场不符时可直接修改。</p>
+      <div class="setup-row">
+        <label>BTN 座位 <input type="number" id="pos-btn" min="1" max="${s.capacity}" value="${preview.buttonSeatId ?? ""}"></label>
+        <label>SB 座位（留空=空小盲） <input type="number" id="pos-sb" min="1" max="${s.capacity}" value="${preview.smallBlindSeatId ?? ""}"></label>
+        <label>BB 座位 <input type="number" id="pos-bb" min="1" max="${s.capacity}" value="${preview.bigBlindSeatId}"></label>
+      </div>
+      <label class="switch-line"><input type="checkbox" id="pos-confirm"> 我确认以上位置与现场一致</label>`;
+    container.querySelector("#pos-confirm").addEventListener("change", (e) => {
+      rt.nextPositionsConfirmed = e.target.checked;
+      if (e.target.checked) {
+        applyDraftPositions(s.nextHandDraft, {
+          buttonSeatId: Number(container.querySelector("#pos-btn").value) || null,
+          smallBlindSeatId: container.querySelector("#pos-sb").value === "" ? null : Number(container.querySelector("#pos-sb").value),
+          bigBlindSeatId: Number(container.querySelector("#pos-bb").value) || null,
+          source: "manual", confirmed: true,
+        });
+      }
+      renderSettle();
+    });
+  } else {
+    const p = s.nextHandDraft?.positions;
+    container.innerHTML = `<p class="footnote">下一手位置：BTN ${p?.buttonSeatId ?? preview.buttonSeatId}号座 · SB ${p?.smallBlindSeatId ?? preview.smallBlindSeatId ?? "空"} · BB ${p?.bigBlindSeatId ?? preview.bigBlindSeatId}号座（${rosterChanged ? "已确认校准" : "自动轮转"}）</p>`;
+  }
+}
+
+async function commitSettlement(area) {
+  const s = rt.session;
+  const btn = area.querySelector("#settle-commit");
+  btn.disabled = true;
+  try {
+    const nextDraft = s.nextHandDraft || emptyNextHandDraft(s);
+    if (!nextDraft.positions && !nextDraft.rosterEdits.length) {
+      applyDraftPositions(nextDraft, { ...automaticNextPositions(s), confirmed: true });
     }
+    s.nextHandDraft = nextDraft;
+    const tx = beginCommit(s);                            // S02.1–2：同步校验
+    await prepareRaw(buildNextContextForPrepare(s, tx));  // S02.5：后端验证下一手
+    const committed = completeCommit(s, tx, null);        // S02.3–6：原子迁移
+    rt.session = committed;
+    rt.view = null;
+    rt.advice = null;
+    rt.adviceState = "idle";
+    rt.nextPositionsConfirmed = false;
+    rt.coord.resync(committed);
+    persist();                                            // S02.7：成功才渲染新手
     renderAll();
-    if (data.actor === state.heroPos && !data.hand_over) {
-      const snapRev = state.revision;
-      const r2 = await fetch("/api/hand/advice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...statsHeaders() },
-        body: JSON.stringify(payload()),
-      });
-      // 09/25/36：等长动作分支（撤销再改一步）revision 也不同；读取响应
-      // 体前后各检一次，旧正文不得写回
-      if (r2.ok && !stale() && state.revision === snapRev) {
-        const advice = await r2.json();
-        if (!stale() && state.revision === snapRev) {
-          state.advice = advice.advice;
-          renderAdvice();
-        }
-      }
+    if (rt.session.phase === "ready") {
+      setStatus(`第 ${rt.session.currentHand.handNumber} 手开始，请选择本手底牌。`);
     }
-  } catch (_) {
-    if (stale()) return;
-    state.busy = false;
-    showError("无法连接本机服务 — 请确认服务正在运行");
-    renderAll();
-  }
-  if (!stale() && state.pending) {
-    const op = state.pending;
-    state.pending = null;
-    pushOp(op);
+  } catch (e) {
+    showSettleError(`结算未完成：${e.message}`);          // 保留结算页与输入（S02 末段）
+    btn.disabled = false;
   }
 }
 
-/* ---------- 事件 ---------- */
-
-document.addEventListener("click", (ev) => {
-  const btn = ev.target.closest("[data-action]");
-  if (!btn) return;
-  if (state.busy) return;
-  const action = btn.dataset.action;
-
-  switch (action) {
-    case "card": {
-      const card = btn.dataset.card;
-      if (state.gridMode === "board") {
-        if (!state.boardPicks.includes(card)) state.boardPicks.push(card);
-        const need = STREET_DEAL[state.view.street];
-        if (state.boardPicks.length >= need) {
-          state.revision += 1;   // 36：公共牌提交与动作同一版本纪律
-          state.unconfirmed = true;
-          state.ops.push({ op: "board", cards: state.boardPicks.slice(0, need) });
-          state.boardPicks = [];
-          state.gridMode = null;
-          refresh();
-        } else {
-          renderGrid();
-          renderBoard();
-          updateDeckTip();
-        }
-      } else if (AppLogic.heroPickAllowed(state)) {
-        const idx = state.heroCards.findIndex((c) => !c);
-        state.revision += 1;
-        state.heroCards[idx] = card;
-        refresh();   // 仅在底牌未选齐时生效；选满后点牌库一律忽略，防误触重开
-      }
-      return;
+function buildNextContextForPrepare(s, tx) {
+  // 临时构造下一手 context 供后端 prepare 验证（不落盘，S02.5）
+  const clone = JSON.parse(JSON.stringify(s));
+  for (const row of tx.settlement.rows) {
+    const occ = clone.occupants[row.occupantId];
+    if (occ) occ.confirmedChips = row.finalChips;
+    if (row.finalChips === 0 && clone.occupants[row.occupantId]) {
+      // 淘汰者从下一手名单移除由 completeCommit 的 leave 编辑处理；此处含 0 筹码也可 prepare
     }
-    case "hero-pick":
-    case "hero-clear": {
-      // 28：清底牌走统一状态迁移——旧实现只清 ops/view/advice，
-      // 残留 gridMode='board' 会让下一次点牌库走进公共牌分支而崩溃
-      const idx = Number(btn.dataset.idx);
-      if (!state.heroCards[idx]) return;   // 点空槽无动作（原语义）
-      const kept = state.heroCards[1 - idx];
-      resetHandState();
-      state.heroCards = [null, null];
-      if (kept) state.heroCards[1 - idx] = kept;   // 保留另一张已选底牌
-      refresh(); return;
-    }
-    case "deal-toggle": {
-      state.gridMode = state.gridMode === "board" ? null : "board";
-      state.boardPicks = [];
-      renderGrid(); renderBoard(); renderConsole(); updateDeckTip(); return;
-    }
-    case "do-fold": pushOp({ op: "action", type: "fold", seat: state.view.actor }); return;
-    case "do-call": pushOp({ op: "action", type: state.view.to_call > 0 ? "call" : "check", seat: state.view.actor }); return;
-    case "do-allin": pushOp({ op: "action", type: "allin", seat: state.view.actor }); return;
-    case "do-raise-to": {
-      // data-to 已是筹码值；仅夹在合法范围内，不能再按 BB 换算
-      const v = Number(btn.dataset.to);
-      const to = Math.max(state.view.min_raise_to, Math.min(state.view.max_raise_to, v));
-      pushOp({ op: "action", type: "raise", to, seat: state.view.actor });
-      return;
-    }
-    case "do-raise-input": commitRaiseInput(); return;
-    case "reopen":
-      // 全新重开：筹码恢复默认 + 清空手牌与操作记录
-      state.config.stacks = null;
-      saveConfig();
-      resetHandState();
-      state.gridMode = "hero";
-      refresh();
-      return;
-    case "stats-reset":
-      if (confirm("确定清空学习数据？（公开模式下只清你自己的数据）")) {
-        fetch("/api/stats/reset", { method: "POST", headers: statsHeaders() })
-          .then(() => refreshLearn());
-      }
-      return;
-    case "undo": state.revision += 1; state.ops.pop(); state.unconfirmed = false; state.pending = null; state.gridMode = null; state.boardPicks = []; renderGrid(); renderBoard(); updateDeckTip(); refresh(); return;
-    case "retry": state.error = null; refresh(); return;   // 26：同快照重试
-    case "reset":
-      resetHandState();
-      state.gridMode = "hero";
-      refresh(); return;
   }
-});
-
-function rebuildPosOptions(n) {
-  const sel = $("#cfg-pos");
-  const names = POSITIONS_BY_SIZE[n];
-  sel.innerHTML = names.map((p) => `<option>${p}</option>`).join("");
-  sel.value = names[names.length - 1];   // 默认 BTN
-  state.heroPos = sel.value;
+  for (const edit of tx.nextDraft.rosterEdits) {
+    if (edit.type === "leave") {
+      const seat = clone.seats.find((x) => x.occupantId === edit.occupantId);
+      if (seat) seat.occupantId = null;
+      delete clone.occupants[edit.occupantId];
+    } else if (edit.type === "move") {
+      const from = clone.seats.find((x) => x.occupantId === edit.occupantId);
+      const to = clone.seats.find((x) => x.id === edit.targetSeatId);
+      if (from) from.occupantId = null;
+      if (to) to.occupantId = edit.occupantId;
+    } else if (edit.type === "enter") {
+      const seat = clone.seats.find((x) => x.id === edit.seatId);
+      if (seat) seat.occupantId = edit.occupantId;
+      clone.occupants[edit.occupantId] = {
+        id: edit.occupantId, status: "active",
+        confirmedChips: edit.chips, profileName: edit.name || null,
+      };
+    }
+  }
+  const draft = tx.nextDraft;
+  clone.blindLevel = { ...draft.blindLevel };
+  clone.learningEnabled = draft.learningEnabled;
+  clone.icm = JSON.parse(JSON.stringify(draft.icm));
+  const positions = draft.positions
+    || automaticNextPositions({ seats: clone.seats, occupants: clone.occupants, positions: clone.positions, capacity: clone.capacity });
+  clone.positions = positions;
+  const participants = [];
+  for (const seat of clone.seats) {
+    if (!seat.occupantId) continue;
+    const occ = clone.occupants[seat.occupantId];
+    if (occ.status !== "active") continue;
+    participants.push({ seat_id: seat.id, occupant_id: occ.id, starting_chips: occ.confirmedChips });
+  }
+  const profileNames = {};
+  if (clone.learningEnabled) {
+    for (const seat of clone.seats) {
+      const occ = clone.occupants[seat.occupantId];
+      if (occ?.status === "active" && occ.profileName) profileNames[occ.id] = occ.profileName;
+    }
+  }
+  return {
+    protocol_version: 2,
+    hand_id: "preview-" + tx.transactionId,
+    hand_number: s.handNumber + 1,
+    context: {
+      session_id: clone.sessionId,
+      capacity: clone.capacity,
+      hero_occupant_id: clone.heroOccupantId,
+      participants,
+      button_seat_id: positions.buttonSeatId,
+      small_blind_seat_id: positions.smallBlindSeatId,
+      big_blind_seat_id: positions.bigBlindSeatId,
+      blinds: { sb: clone.blindLevel.sb, bb: clone.blindLevel.bb, ante_each: clone.blindLevel.anteEach },
+      learning_enabled: clone.learningEnabled,
+      profile_names: profileNames,
+      icm: { scope: clone.icm.scope, payouts: clone.icm.payouts },
+    },
+  };
 }
 
-// 各座位筹码：实时提交（每次输入立即保存，页面重载不丢失）
-$("#names-grid").addEventListener("input", (ev) => {
-  const input = ev.target.closest("input[data-name-pos]");
-  if (!input) return;
-  setOpponentName(input.dataset.namePos, input.value.trim());
-});
+/* ------------------------------------------------------------- 推演 */
 
-$("#stack-grid").addEventListener("input", (ev) => {
-  const input = ev.target.closest("input[data-stack-idx]");
-  if (!input) return;
-  const stacks = currentStacks();
-  stacks[Number(input.dataset.stackIdx)] = Math.max(1, Number(input.value) || 1);
-  state.config.stacks = stacks;
-  saveConfig();
-});
-
-$("#cfg-size").addEventListener("change", () => {
-  state.config.player_count = Number($("#cfg-size").value);
-  saveConfig();
-  tuneIterations();
-  rebuildPosOptions(state.config.player_count);
-  resetHandState();
-  refresh();
-});
-
-$("#cfg-payouts").addEventListener("change", () => {
-  const raw = $("#cfg-payouts").value.trim();
-  const nums = raw ? raw.split(/[，,\s]+/).map(Number).filter((n) => !Number.isNaN(n) && n >= 0) : [];
-  state.config.payouts = nums;
-  saveConfig();
-  refresh();
-});
-
-["cfg-sb", "cfg-bb", "cfg-ante", "cfg-stack"].forEach((id) =>
-  $("#" + id).addEventListener("change", () => {
-    // 13：按字段更新而不是整体重建——payouts 等其他配置不能被静默丢掉
-    state.config.sb = Number($("#cfg-sb").value) || 100;
-    state.config.bb = Number($("#cfg-bb").value) || 200;
-    state.config.ante = Number($("#cfg-ante").value) || 0;
-    state.config.stack = Number($("#cfg-stack").value) || 10000;
-    state.config.stacks = null;
-    saveConfig();
-    resetHandState();
-    refresh();
-  })
-);
-
-$("#cfg-pos").addEventListener("change", () => {
-  state.heroPos = $("#cfg-pos").value;   // 只换座位，手牌保留，设置顺序无关
-  resetHandState({ keepCards: true });
-  renderNames();
-  refresh();
-});
-
-/* ---------- 渲染总入口与启动 ---------- */
-
-function renderNames() {
-  const names = POSITIONS_BY_SIZE[state.config.player_count]
-    .filter((p) => p !== state.heroPos);
-  $("#names-grid").innerHTML = names.map((p) => {
-    const v = AppLogic.escapeHtml(opponentName(p));
-    return `<label class="stack-cell">${p}<input type="text" data-name-pos="${p}" value="${v}" placeholder="—" aria-label="${p} 对手代号"></label>`;
-  }).join("");
-}
-
-function renderIcm() {
-  const el = $("#icm-panel");
-  if (!el) return;
-  const icm = state.view && state.view.icm;
-  if (!icm) { el.hidden = true; el.innerHTML = ""; return; }
-  el.hidden = false;
-  if (icm.error) { el.innerHTML = `<p class="footnote">ICM：${icm.error}</p>`; return; }
-  const rows = icm.rows.map((r) =>
-    `<tr class="${r.hero ? "icm-hero" : ""}"><td>${r.pos}${r.hero ? "（你）" : ""}</td>` +
-    `<td>${money(r.stack)}</td><td>${r.pct}%</td><td>${money(r.equity)}</td></tr>`).join("");
-  el.innerHTML = `
-    <div class="icm-title">ICM 奖金期望 <span class="tip">（奖池 ${money(icm.total)} · Malmuth–Harville · 按手前记分牌快照）</span></div>
-    <table class="icm-table"><thead><tr><th>座位</th><th>手前记分牌</th><th>份额</th><th>期望奖金</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <p class="footnote">泡沫期中短筹码的边缘牌跟注价值低于记分牌 EV，淘汰风险要计入决策。</p>`;
-}
-
-function resetHandState({ keepCards = false } = {}) {
-  // 13：所有"重开一手"语义的唯一入口——集中清理，防止遗漏 recorded/选牌/挂起请求
-  state.ops = [];
-  if (!keepCards) state.heroCards = [null, null];
-  state.handId = AppLogic.newHandId();   // 14：每手新手牌一个新 id
-  state.unconfirmed = false;             // 26：旧手的待确认标记随之作废
-  state.revision += 1;                   // 36：重开也是状态变更，作废旧响应
-  state.view = null; state.advice = null; state.pending = null;
-  state.error = null; state.gridMode = null; state.boardPicks = [];
-  state.recorded = false;
-  state.busy = false;   // 25：旧请求的响应将因 handId 不匹配被丢弃，放行新请求
-}
-
-function renderZoneFocus() {
-  const zone = AppLogic.nextZone(state);
-  [["setup", "setup"], ["console", "console"], ["deck-panel", "deck"]].forEach(([id, z]) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle("zone-focus", z === zone);
+function maybeAdvice() {
+  const s = rt.session;
+  const view = rt.view;
+  if (!view || view.hand_over || !s.currentHand
+    || !s.currentHand.heroCards[0]) { rt.adviceState = "idle"; return; }
+  if (view.actor_seat_id !== heroSeatOf(s)) { rt.adviceState = "idle"; renderAdvice(); return; }
+  rt.adviceState = "pending";
+  renderAdvice();
+  const capturedOps = s.currentHand.ops;
+  rt.coord.submitAdvice(rt.session, viewPayload(capturedOps), {
+    onResult(body) {
+      rt.advice = body;
+      rt.adviceState = "updated";
+      renderAdvice();
+    },
+    onError() {
+      rt.adviceState = "failed";
+      renderAdvice();
+    },
   });
 }
 
+/* ------------------------------------------------------------- 渲染 */
+
+function resyncAll() { rt.coord?.resync(rt.session); }
+
 function renderAll() {
-  renderIcm();
-  renderZoneFocus();
-  renderHeroSlots();
-  renderNames();
-  renderStackInputs();
-  renderGrid();
-  updateDeckTip();
+  if (!rt.session) return;
+  const s = rt.session;
+  $("#layout").dataset.phase = s.phase;
+  $("#col-table").hidden = false;
+  $("#setup-panel").hidden = true;
+  $("#console").hidden = s.phase === "ended";
+  $("#advice-panel").hidden = s.phase !== "playing" && s.phase !== "ready";
+  $("#advanced-panel").hidden = false;
+  $("#history-panel").hidden = false;
+  $("#nextround-panel").hidden = s.phase !== "settling";
+  if (s.phase !== "settling") $("#settle-area").hidden = true;
+  renderSessionBar();
+  renderTableCaption();
   renderSeats();
   renderBoard();
   renderConsole();
   renderAdvice();
+  renderHistory();
+  renderAdvanced();
+  if (s.phase === "settling") renderSettle();
+  renderDeck();
 }
 
-$("#cfg-size").value = String(state.config.player_count);
-rebuildPosOptions(state.config.player_count);
-$("#cfg-sb").value = state.config.sb;
-$("#cfg-bb").value = state.config.bb;
-$("#cfg-ante").value = state.config.ante;
-$("#cfg-stack").value = state.config.stack;
-$("#cfg-payouts").value = (state.config.payouts || []).join(",");
-state.gridMode = "hero";
-tuneIterations();
-renderAll();
-refreshLearn();
+function renderSessionBar() {
+  const s = rt.session;
+  const seat = heroSeatOf(s);
+  const roleLabel = seat ? (rolesForSeat(s, seat).join("/") || rangePositionFor(s, seat) || "—") : "—";
+  const occ = s.occupants[s.heroOccupantId];
+  const phaseText = { ready: "待选底牌", playing: "进行中", settling: "待核对筹码", ended: "本桌已结束" }[s.phase] || "";
+  $("#session-status").innerHTML = s.phase === "ended"
+    ? `本桌已结束 · 共 ${s.handNumber} 手 · 你最终 ${fmtChips(occ?.confirmedChips ?? 0)} 筹码`
+    : `本桌第 ${s.handNumber} 手 · ${phaseText} · 你：${seat ?? "—"}号座/${esc(roleLabel)} · ` +
+      `盲注 ${s.blindLevel.sb}/${s.blindLevel.bb} · 每人前注 ${s.blindLevel.anteEach} · ` +
+      `${fmtChips(occ?.confirmedChips ?? 0)} 筹码`;
+  const slot = $("#bar-main-slot");
+  slot.innerHTML = "";
+  if (s.phase === "playing" || s.phase === "ready") {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost-btn";
+    btn.textContent = "重录本手";
+    btn.setAttribute("data-action", "replay-hand");
+    btn.addEventListener("click", onReplayHand);
+    slot.appendChild(btn);
+  } else if (s.phase === "ended") {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost-btn";
+    btn.textContent = "新建牌桌";
+    btn.setAttribute("data-action", "new-table");
+    btn.addEventListener("click", onNewTable);
+    slot.appendChild(btn);
+  }
+}
+
+function onNewTable() {
+  if (!window.confirm("新建牌桌？当前会话将被清除（可先在“更多设置”导出）。")) return;
+  Store.clearSession();
+  location.reload();
+}
+
+function renderTableCaption() {
+  const s = rt.session;
+  if (!s || !s.currentHand) {
+    $("#caption-hand").textContent = "";
+    $("#caption-seat").textContent = "";
+    return;
+  }
+  const seat = heroSeatOf(s);
+  const roleLabel = seat ? (rolesForSeat(s, seat).join("/") || rangePositionFor(s, seat) || "—") : "—";
+  const stage = s.phase === "settling" ? "待核对筹码"
+    : s.phase === "playing" && rt.view ? (STREET_LABEL[rt.view.street] || "")
+    : s.phase === "ready" ? "待选底牌" : "";
+  $("#caption-hand").textContent = `本桌第 ${s.currentHand.handNumber} 手 · ${stage}`;
+  $("#caption-seat").textContent =
+    `你：${seat ?? "—"}号座 / ${roleLabel} · 盲注${s.blindLevel.sb}/${s.blindLevel.bb} · 每人前注${s.blindLevel.anteEach}`;
+  $("#pot-num").textContent = rt.view
+    ? `${fmtChips(rt.view.pot)} 筹码 / ${chipsToBBText(rt.view.pot, s.blindLevel.bb)} BB`
+    : "—";
+}
+
+function seatXY(i, n) {
+  const x = 50 + 40 * Math.sin((i / n) * 2 * Math.PI);
+  const y = 50 - 42 * Math.cos((i / n) * 2 * Math.PI);
+  return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+}
+
+function renderSeats() {
+  const s = rt.session;
+  if (!s) return;
+  const layer = $("#seat-layer");
+  const viewSeats = rt.view ? new Map(rt.view.seats.map((x) => [x.seat_id, x])) : null;
+  const html = [];
+  for (const seat of s.seats) {
+    const occ = seat.occupantId ? s.occupants[seat.occupantId] : null;
+    const xy = seatXY(seat.id - 1, s.capacity);
+    if (!occ || occ.status !== "active") {
+      html.push(`<div class="seat empty" style="left:${xy.x}%;top:${xy.y}%" data-seat="${seat.id}">
+        <div class="pos-tag">${seat.id}号座</div><div class="stack muted">空位</div></div>`);
+      continue;
+    }
+    const vs = viewSeats?.get(seat.id);
+    const roles = rolesForSeat(s, seat.id);
+    const roleTag = roles.length ? `<span class="pos-tag">${roles.join("/")}</span>` : "";
+    const isHero = occ.id === s.heroOccupantId;
+    const stack = vs ? vs.stack : occ.confirmedChips;
+    const folded = vs?.folded;
+    const allIn = vs?.all_in;
+    const acting = rt.view && rt.view.actor_seat_id === seat.id && !rt.view.hand_over;
+    html.push(`<div class="seat${isHero ? " hero" : ""}${acting ? " acting" : ""}${folded ? " folded" : ""}" style="left:${xy.x}%;top:${xy.y}%" data-seat="${seat.id}">
+      <div class="pos-tag">${seat.id}号座${isHero ? " · 你" : ""} ${roleTag}</div>
+      <div class="stack">${chipsToBBText(stack, s.blindLevel.bb)}BB
+        <span class="bb-tag">${fmtChips(stack)}</span></div>
+      ${allIn ? '<span class="badge badge-allin">全下</span>' : ""}
+      ${folded ? '<span class="badge badge-fold">弃牌</span>' : ""}
+      ${acting ? '<span class="badge acting-tag">待录入动作</span>' : ""}
+    </div>`);
+  }
+  layer.innerHTML = html.join("");
+  renderOpsLine();
+}
+
+function renderBoard() {
+  const slots = $("#board-slots");
+  const cards = rt.view?.board || [];
+  const html = [];
+  for (let i = 0; i < 5; i++) {
+    const c = cards[i];
+    html.push(`<button type="button" class="slot static ${c ? "filled " + (IS_RED[c[1]] ? "red" : "black") : ""}"
+      ${c ? "" : "disabled"} aria-label="公共牌${i + 1}">${c ? `<span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span>` : "+"}</button>`);
+  }
+  slots.innerHTML = html.join("");
+}
+
+function renderOpsLine() {
+  const s = rt.session;
+  const el = $("#ops-line");
+  const ops = s.currentHand?.ops || [];
+  const viewSeats = rt.view ? new Map(rt.view.seats.map((x) => [x.seat_id, x])) : null;
+  el.innerHTML = ops.filter((op) => op.op === "action").map((op, i) => {
+    const label = viewSeats ? (viewSeats.get(op.seat_id)?.range_position || `${op.seat_id}号座`) : `${op.seat_id}号座`;
+    const desc = op.type === "fold" ? "弃牌" : op.type === "allin" ? "全下"
+      : op.type === "raise" ? `加注到 ${op.to}` : op.type === "check" ? "过牌"
+      : `跟注 ${op.amount || ""}`;
+    return `<span class="op-chip">${i + 1}. ${label} ${desc}</span>`;
+  }).join("");
+}
+
+/* --------------------------------------------------------------- 牌库 */
+
+function renderDeck() {
+  const s = rt.session;
+  if (!s || !s.currentHand) return;
+  const grid = $("#card-grid");
+  const taken = new Set(rt.view?.taken || []);
+  const heroCards = s.currentHand.heroCards;
+  const deckTip = $("#deck-tip");
+  if (rt.gridMode === "board") {
+    deckTip.textContent = `（选择公共牌：已选 ${rt.boardPicks.length}/${nextBoardNeed()}，选满自动发牌）`;
+  } else if (!heroCards[0] || !heroCards[1]) {
+    deckTip.textContent = "（点选你的 2 张底牌）";
+  } else {
+    deckTip.textContent = "（点“发公共牌”进入选牌）";
+  }
+  const heroDone = !!heroCards[0] && !!heroCards[1];
+  const html = [];
+  for (const suit of SUITS) {
+    for (const rank of RANKS) {
+      const card = rank + suit;
+      const isHeroPick = rt.gridMode !== "board" && heroCards.includes(card);
+      const isBoardPick = rt.gridMode === "board" && rt.boardPicks.includes(card);
+      const disabled = (!isHeroPick && !isBoardPick && taken.has(card)) || (rt.gridMode !== "board" && heroDone);
+      html.push(`<button type="button" class="grid-card${IS_RED[suit] ? " red" : " black"}${isHeroPick || isBoardPick ? " picked" : ""}"
+        data-card="${card}" ${disabled ? "disabled" : ""} aria-label="选择 ${card}">${rank}${SUIT_GLYPH[suit]}</button>`);
+    }
+  }
+  grid.innerHTML = html.join("");
+  for (const btn of grid.querySelectorAll(".grid-card:not([disabled])")) {
+    btn.addEventListener("click", () => onDeckPick(btn.dataset.card));
+  }
+}
+
+function nextBoardNeed() {
+  return STREET_DEAL[rt.view?.street] || 0;
+}
+
+function onDeckPick(card) {
+  if (rt.gridMode === "board") {
+    if (rt.boardPicks.includes(card)) {
+      rt.boardPicks = rt.boardPicks.filter((x) => x !== card);
+    } else if (rt.boardPicks.length < nextBoardNeed()) {
+      rt.boardPicks.push(card);
+    }
+    if (rt.boardPicks.length === nextBoardNeed()) {
+      const cards = [...rt.boardPicks];
+      rt.boardPicks = [];
+      rt.gridMode = null;
+      submitAction({ op: "board", cards });
+      return;
+    }
+    renderDeck();
+    return;
+  }
+  const hand = rt.session.currentHand;
+  if (hand.heroCards[0] && hand.heroCards[1]) return;
+  rt.heroPicks = [...rt.heroPicks, card].slice(-2);
+  if (rt.heroPicks.length === 2) {
+    setHeroCards(rt.session, rt.heroPicks);
+    rt.heroPicks = [];
+    persist();
+    renderAll();
+    refreshView();
+    // 5.4：手机端选齐底牌后收起牌库
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      $("#deck-panel").open = false;
+    }
+    return;
+  }
+  renderDeck();
+}
+
+/* --------------------------------------------------------------- 操作台 */
+
+function setStatus(msg) { $("#status-line").textContent = msg; }
+
+function renderConsole() {
+  const s = rt.session;
+  if (!s) return;
+  const area = $("#action-area");
+  const hand = s.currentHand;
+  if (s.phase === "ended") {
+    setStatus("本桌已结束。可在上方新建牌桌。");
+    area.innerHTML = "";
+    return;
+  }
+  if (s.phase === "settling") {
+    setStatus("请核对全桌手后实际余额，确认后进入下一手。");
+    area.innerHTML = "";
+    return;
+  }
+  if (!hand) return;
+  if (!hand.heroCards[0] || !hand.heroCards[1]) {
+    setStatus("请选择你的 2 张底牌。");
+    area.innerHTML = "";
+    return;
+  }
+  if (!rt.view) {
+    setStatus(rt.coord?.viewPending() ? "正在更新局面…" : "等待局面更新…");
+    area.innerHTML = "";
+    return;
+  }
+  const heroSeat = heroSeatOf(s);
+  if (rt.view.hand_over) {
+    setStatus("本手已结束，请核对全桌余额。");
+    area.innerHTML = "";
+    return;
+  }
+  const heroInfo = rt.view.seats.find((x) => x.seat_id === heroSeat);
+  if (rt.view.actor_seat_id !== heroSeat) {
+    setStatus(heroInfo?.folded
+      ? `你已弃牌。当前轮到 ${rt.view.actor_seat_id}号座，可继续录入其余玩家动作。`
+      : `轮到 ${rt.view.actor_seat_id}号座（${rt.view.seats.find((x) => x.seat_id === rt.view.actor_seat_id)?.range_position || ""}）行动，请录入其动作。`);
+    renderActionButtons(false);
+    return;
+  }
+  const toCall = rt.view.to_call || 0;
+  setStatus(rt.coord?.viewPending()
+    ? "正在更新局面…"
+    : `轮到你（${heroSeat}号座）行动 · 需跟注 ${fmtChips(toCall)} 筹码 / ${chipsToBBText(toCall, s.blindLevel.bb)}BB`);
+  renderActionButtons(true);
+}
+
+function renderActionButtons(isHero) {
+  const area = $("#action-area");
+  const s = rt.session;
+  const view = rt.view;
+  if (!view) { area.innerHTML = ""; return; }
+  const bb = s.blindLevel.bb;
+  const pending = rt.coord.viewPending();
+  const dis = pending ? "disabled" : "";
+  const btn = (action, label, cls = "") =>
+    `<button type="button" class="act-btn ${cls}" data-act="${action}" ${dis}>${label}</button>`;
+  const seat = view.actor_seat_id;
+  const toCall = view.to_call || 0;
+  let html = btn(`fold:${seat}`, "弃牌")
+    + btn(`call:${seat}`, toCall > 0 ? `跟注 ${fmtChips(toCall)} / ${chipsToBBText(toCall, bb)}BB` : "过牌");
+  const minTo = view.min_raise_to;
+  const maxTo = view.max_raise_to;
+  if (minTo != null && maxTo != null && minTo <= maxTo) {
+    html += btn(`allin:${seat}`, "全下", "allin")
+      + `<span class="raise-box"><label>加注到
+          <input type="number" id="raise-input" inputmode="numeric" value="${minTo}" min="${minTo}" max="${maxTo}">
+          （${chipsToBBText(minTo, bb)}–${chipsToBBText(maxTo, bb)}BB）</label>
+          <button type="button" class="act-btn" data-act="raise:${seat}" ${dis}>加注</button></span>`;
+  }
+  const need = nextBoardNeed();
+  html += `<button type="button" class="ghost-btn" data-act="deal-board" ${pending || !need || rt.gridMode === "board" ? "disabled" : ""}>发${STREET_LABEL[view.street] || ""}（${need} 张）</button>`;
+  html += `<button type="button" class="ghost-btn" data-act="undo" ${pending || !s.currentHand.ops.length ? "disabled" : ""}>撤销上一步</button>`;
+  if (!isHero) {
+    html += `<button type="button" class="ghost-btn" data-act="manual-close" ${dis}>结束本手，手动核对余额</button>`;
+  }
+  area.innerHTML = html;
+  for (const el of area.querySelectorAll("[data-act]")) {
+    el.addEventListener("click", () => onActButton(el.dataset.act));
+  }
+  area.querySelector("#raise-input")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); onActButton(`raise:${view.actor_seat_id}`); }
+  });
+}
+
+function onActButton(spec) {
+  const view = rt.view;
+  if (!view) return;
+  const [action, seatStr] = spec.split(":");
+  const seatId = Number(seatStr) || view.actor_seat_id;
+  if (action === "fold") return submitAction({ op: "action", seat_id: seatId, type: "fold" });
+  if (action === "call") return submitAction({ op: "action", seat_id: seatId, type: view.to_call > 0 ? "call" : "check" });
+  if (action === "allin") return submitAction({ op: "action", seat_id: seatId, type: "allin" });
+  if (action === "raise") {
+    const input = $("#raise-input");
+    const to = Number(input?.value);
+    if (!Number.isSafeInteger(to)) return setStatus("加注额必须为整数筹码");
+    return submitAction({ op: "action", seat_id: seatId, type: "raise", to });
+  }
+  if (action === "undo") return onUndo();
+  if (action === "manual-close") return onManualClose();
+  if (action === "deal-board") {
+    rt.gridMode = "board";
+    rt.boardPicks = [];
+    $("#deck-panel").open = true;
+    renderDeck();
+    $("#deck-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function renderAdvice() {
+  const s = rt.session;
+  const box = $("#advice");
+  const note = $("#advice-note");
+  if (!s || s.phase !== "playing" || !rt.view || rt.view.hand_over
+    || rt.view.actor_seat_id !== heroSeatOf(s)) {
+    const stateText = {
+      idle: "轮到你行动时，这里给出与最新录入局面匹配的推演。",
+      pending: "正在推演…（不影响继续录入动作）",
+      failed: "推演失败。",
+    }[rt.adviceState];
+    box.innerHTML = `<p class="empty">${stateText}</p>${rt.adviceState === "failed"
+      ? '<button type="button" class="ghost-btn" data-action="retry-advice">重试推演</button>' : ""}`;
+    box.querySelector("[data-action=retry-advice]")?.addEventListener("click", () => maybeAdvice());
+    note.textContent = "";
+    return;
+  }
+  if (rt.adviceState === "pending" || !rt.advice) {
+    box.innerHTML = '<p class="empty">正在推演…</p>';
+    note.textContent = "";
+    return;
+  }
+  const adv = rt.advice.advice;
+  const bb = s.blindLevel.bb;
+  const eq = adv.equity || {};
+  const rec = adv.recommendation || {};
+  const mixHtml = (mix) => (mix || []).map((m) => `
+    <div class="mix-row"><span class="mix-label">${esc(m.label)}</span>
+      <span class="mix-bar"><i style="width:${Math.max(2, Math.min(100, m.pct))}%"></i></span>
+      <span class="mix-pct">${m.pct}%</span></div>`).join("");
+  let cfrHtml = "";
+  const c = adv.cfr;
+  if (c && c.supported) {
+    cfrHtml = `<div class="cfr-box"><div class="cfr-title">CFR 均衡参考
+        <span class="cfr-meta">${c.street || "河牌"}${c.approximate ? "（近似）" : ""} · ${c.iterations} 次迭代</span></div>
+      ${mixHtml(c.mix)}
+      <p class="cfr-note">对范围权益约 ${c.equity_vs_range}%。${c.agree ? "与启发式方向一致。" : "与启发式方向不同：均衡频率，供交叉参考。"}</p></div>`;
+  }
+  const oppRows = (adv.opponents || []).map((o) =>
+    `<tr><td>${esc(o.pos || "")}</td><td>${esc(o.situation || "")} · ${o.combos || ""} 组合</td>
+     <td>${chipsToBBText(o.stack || 0, bb)}BB</td></tr>`).join("");
+  box.innerHTML = `
+    <div class="big">${eq.win.toFixed(1)}<small>% 胜率（含平 ${eq.tie.toFixed(1)}%，范围估算）</small></div>
+    <div class="bar" role="img" aria-label="胜 ${eq.win}% 平 ${eq.tie}% 负 ${eq.lose}%">
+      <i class="w" style="width:${eq.win}%"></i><i class="t" style="width:${eq.tie}%"></i><i class="l" style="width:${eq.lose}%"></i></div>
+    <div class="rec-box"><div class="rec-title">行动建议（启发式）</div>
+      <div class="rec-primary">${esc(rec.primary || "—")}</div>
+      ${mixHtml(rec.mix)}
+      <p class="rec-reason">${esc(rec.reason || "")}</p></div>
+    <table class="adv-table">
+      <tr><td>需跟注</td><td>${adv.to_call > 0 ? chipsToBBText(adv.to_call, bb) + " BB" : "0（可过牌）"}</td></tr>
+      <tr><td>跟注所需胜率</td><td>${adv.required_eq}%</td></tr>
+      <tr><td>你的权益</td><td>${(adv.equity_share ?? eq.win + eq.tie / 2).toFixed(1)}%（可争夺份额）</td></tr>
+      <tr><td>跟注 EV</td><td class="${adv.ev_call >= 0 ? "pos" : "neg"}">${adv.ev_call >= 0 ? "+" : ""}${chipsToBBText(adv.ev_call, bb)} BB</td></tr>
+      <tr><td>SPR</td><td>${rec.spr ?? "—"}${rec.spr_note ? " · " + esc(rec.spr_note) : ""}</td></tr>
+      <tr><td>M 值</td><td>${adv.m_value ?? "—"}</td></tr>
+    </table>
+    <details><summary class="ghost-btn">详细范围与对手</summary>
+      <table class="adv-table"><thead><tr><th>位置</th><th>局面 · 组合</th><th>剩余</th></tr></thead><tbody>${oppRows}</tbody></table>
+    </details>
+    ${cfrHtml}
+    <p class="footnote">${esc(adv.note || "")} · 基于 ${fmtChips(eq.iterations)} 次模拟（范围假设，非实测）</p>`;
+  note.textContent = `需跟注 ${fmtChips(adv.to_call || 0)} / ${chipsToBBText(adv.to_call || 0, bb)}BB`;
+}
+
+function renderHistory() {
+  const body = $("#history-body");
+  const s = rt.session;
+  if (!s) { body.innerHTML = ""; return; }
+  $("#history-tip").textContent = `最近 ${s.recentHands.length} 手（窗口 100）`;
+  body.innerHTML = s.recentHands.slice().reverse().map((h) =>
+    `<p class="footnote">第 ${h.handNumber} 手 · ${h.recordQuality === "manual_close" ? "手工结束" : "完整"} ·
+      ${new Date(h.settledAt).toLocaleString("zh-CN")}${h.adjustmentReason ? ` · 差额原因：${esc(h.adjustmentReason)}` : ""}</p>`).join("")
+    || '<p class="footnote">尚无已完成的手。</p>';
+}
+
+function renderAdvanced() {
+  const s = rt.session;
+  if (!s) return;
+  const sw = $("#tg-learning-switch");
+  sw.checked = s.learningEnabled;
+  if (!sw.dataset.bound) {
+    sw.dataset.bound = "1";
+    sw.addEventListener("change", () => {
+      if (!rt.session.nextHandDraft) {
+        rt.session.nextHandDraft = emptyNextHandDraft(rt.session);
+      }
+      rt.session.nextHandDraft.learningEnabled = sw.checked;
+      persist();
+    });
+  }
+  let unitSel = $("#tg-unit-live");
+  if (!unitSel) {
+    const wrap = document.createElement("div");
+    wrap.className = "setup-row";
+    wrap.innerHTML = `<label>显示单位
+      <select id="tg-unit-live"><option value="bb">BB 优先</option>
+      <option value="chips">筹码优先</option></select></label>
+      <button type="button" class="ghost-btn" id="tg-export">导出会话</button>
+      <button type="button" class="ghost-btn" id="tg-end-session">结束本桌</button>`;
+    $("#advanced-body").prepend(wrap);
+    unitSel = wrap.querySelector("#tg-unit-live");
+    unitSel.value = rt.unit;
+    unitSel.addEventListener("change", (e) => {
+      rt.unit = e.target.value;
+      rt.session.displayUnit = rt.unit;
+      persist();
+      renderAll();
+    });
+    wrap.querySelector("#tg-export").addEventListener("click", () => {
+      downloadRaw(JSON.stringify(rt.session, null, 2));
+    });
+    wrap.querySelector("#tg-end-session").addEventListener("click", () => {
+      if (!window.confirm("结束当前牌桌？已确认的余额与本桌记录将保留。")) return;
+      import("./session.js").then((S) => {
+        S.endSession(rt.session);
+        persist();
+        renderAll();
+      });
+    });
+  }
+}
+
+/* --------------------------------------------------------------- 绑定 */
+
+function bindGlobal() {
+  $("#tg-capacity").addEventListener("change", renderSetupSeats);
+  $("#tg-unit").addEventListener("change", renderSetupSeats);
+  $("#tg-create").addEventListener("click", onPreviewTable);
+  $("#tg-confirm").addEventListener("click", onConfirmTable);
+  Store.onStorageChange((newValue) => {
+    if (rt.conflict) return;
+    const mine = rt.session ? JSON.stringify(rt.session) : null;
+    if (newValue !== null && newValue !== mine) {
+      rt.conflict = true;
+      if (window.confirm("另一个标签页更新了本会话。载入最新版本？")) {
+        location.reload();
+      } else {
+        setStatus("注意：本地会话已在其他标签页被修改，本页写入将被阻止。");
+      }
+    }
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}

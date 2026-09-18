@@ -113,4 +113,4 @@ def test_index_page_served():
     assert "location.replace" in r.text
     r2 = client.get("/app.html")
     assert r2.status_code == 200
-    assert "MTT" in r2.text
+    assert "锦标赛逐手记录" in r2.text   # 5.1：标题改为锦标赛逐手记录与局面推演

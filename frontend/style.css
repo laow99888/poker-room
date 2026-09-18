@@ -366,3 +366,139 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   .bet-chip { font-size: 11px; padding: 2px 7px; }
   #table-logo { font-size: 38px; }
 }
+
+/* ================= 锦标赛连续牌桌（5.1–5.7） ================= */
+
+/* 紧凑会话栏替代高大页头（5.1） */
+.session-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  max-width: 1420px; margin: 0 auto; padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.session-bar .brand {
+  font-family: var(--serif); font-size: 20px; color: var(--gold); letter-spacing: .2em;
+}
+.session-status { font-size: 13px; color: var(--text); flex: 1 1 300px; min-height: 18px; }
+.session-actions { display: flex; align-items: center; gap: 10px; }
+.save-state { font-size: 12px; color: var(--good); }
+.save-state:empty { display: none; }
+
+/* 布局：进行中 左牌桌弹性 + 右操作列固定 */
+main#layout { grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "table right"; }
+main#layout #col-table { grid-area: table; }
+main#layout #col-side { grid-area: right; display: grid; gap: 18px; align-content: start; }
+
+.table-caption {
+  display: flex; align-items: baseline; gap: 12px; justify-content: space-between;
+  font-family: var(--serif); font-size: 17px; color: var(--cream); letter-spacing: .06em;
+}
+.table-subcaption { font-size: 12.5px; color: var(--muted); margin: 4px 0 10px; }
+
+/* 座位卡：数字为主、可辨识状态（5.3） */
+.seat.empty { opacity: .45; }
+.seat .stack { font-size: 15px; }
+.seat .stack.muted { color: var(--muted); font-size: 13px; font-family: var(--sans); }
+.badge.acting-tag {
+  background: var(--gold); color: #211804; font-size: 11px;
+  padding: 1px 7px; border-radius: 9px; white-space: nowrap;
+}
+.seat.acting { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* 建桌向导 */
+.tg-seats { display: grid; gap: 8px; margin: 6px 0 12px; }
+.tg-seat-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 7px 9px; border: 1px dashed var(--line); border-radius: 8px;
+}
+.tg-seat-row.occupied { border-style: solid; background: rgba(0,0,0,.18); }
+.tg-seat-row .tg-occ { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text); min-width: 88px; }
+.tg-seat-row input[type="text"], .tg-seat-row input[type="number"] {
+  background: rgba(0,0,0,.25); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--text); padding: 8px 9px; font-size: 14px; width: 120px;
+}
+.tg-seat-tags { display: inline-flex; gap: 6px; margin-left: auto; }
+.tag-btn {
+  min-width: 44px; min-height: 36px; padding: 6px 10px; cursor: pointer;
+  background: rgba(0,0,0,.25); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--muted); font-size: 12px;
+}
+.tag-btn.picked { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 0 1px var(--gold-deep); }
+.tg-preview { margin: 10px 0; }
+.switch-line { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.form-error { color: var(--bad); font-size: 13px; margin: 8px 0; }
+.form-error[hidden] { display: none; }
+.primary-btn {
+  display: inline-block; width: 100%; margin-top: 8px; cursor: pointer;
+  background: linear-gradient(180deg, #e4bd63, #a8842f); color: #211804;
+  border: 0; border-radius: 8px; padding: 12px 16px; min-height: 44px;
+  font-size: 14px; font-weight: 700; font-family: var(--serif); letter-spacing: .08em;
+}
+.primary-btn:disabled { filter: grayscale(.6); opacity: .6; cursor: wait; }
+
+/* 动作按钮：44px 触控目标、8px 间距（5.4） */
+.act-btn {
+  min-height: 44px; min-width: 96px; margin: 4px 8px 4px 0; cursor: pointer;
+  background: rgba(0,0,0,.25); border: 1px solid var(--gold-deep); border-radius: 8px;
+  color: var(--text); padding: 10px 14px; font-size: 14px;
+}
+.act-btn.allin { border-color: var(--red); color: var(--red); }
+.act-btn:disabled { opacity: .4; cursor: wait; }
+.raise-box { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.raise-box label { font-size: 13px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.raise-box input {
+  width: 110px; background: rgba(0,0,0,.25); border: 1px solid var(--line);
+  border-radius: 6px; color: var(--text); padding: 9px; font-size: 14px;
+}
+.op-chip {
+  display: inline-block; font-size: 12px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 9px; padding: 2px 8px; margin: 2px 4px 2px 0;
+}
+
+/* 结算面板（5.6） */
+.settle-scroll { overflow-x: auto; }
+.settle-table td { font-size: 13px; }
+.settle-input {
+  width: 130px; background: rgba(0,0,0,.25); border: 1px solid var(--gold-deep);
+  border-radius: 6px; color: var(--text); padding: 9px 10px; font-size: 15px;
+}
+.settle-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.src-tag { font-size: 11px; border-radius: 9px; padding: 1px 8px; border: 1px solid var(--line); color: var(--muted); }
+.src-tag.ok { color: var(--good); border-color: var(--good); }
+.src-tag.warn { color: #e8c07f; border-color: #e8c07f; }
+.settle-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.settle-actions .ghost-btn { min-height: 44px; }
+#settle-area { border: 1px solid var(--gold-deep); border-radius: 8px; padding: 12px; margin-bottom: 12px; background: rgba(0,0,0,.15); }
+
+/* 折叠面板摘要样式统一（触控/键盘可达） */
+details.panel > summary { cursor: pointer; list-style: none; }
+details.panel > summary::-webkit-details-marker { display: none; }
+details.panel > summary.group-title::after { content: "＋"; margin-left: auto; color: var(--muted); }
+details.panel[open] > summary.group-title::after { content: "－"; }
+
+/* 5.4 断点 */
+@media (max-width: 1099px) {
+  main#layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "table" "right"; }
+}
+@media (max-width: 767px) {
+  .session-bar { padding: 8px 12px; }
+  .session-status { font-size: 12px; }
+  #tg-seats .tg-seat-row { align-content: flex-start; }
+  .tg-seat-row .tg-occ { min-width: 100%; }
+  .settle-input { width: 100%; max-width: 200px; }
+  .act-btn { min-width: 44%; }
+  .grid-card::after { content: ""; position: absolute; inset: -3px; }   /* 触控热区 */
+  .grid-card { position: relative; }
+  #card-grid, #board-grid { grid-template-columns: repeat(13, minmax(26px, 1fr)); gap: 4px; overflow-x: auto; padding: 4px 2px 10px; }
+  #table-oval { height: 430px; padding: 14px; }
+  #table-oval::after { inset: 52px 60px; }
+  .seat { min-width: 0; padding: 6px 8px; }
+  .seat::before { inset: -7px -9px; }
+  .pos-tag { font-size: 11px; }
+  .seat .stack { font-size: 14px; }
+  .mini-card { font-size: 11px; padding: 2px 4px; }
+  .bet-chip { font-size: 11px; padding: 2px 7px; }
+  #table-logo { font-size: 38px; }
+  main#layout { grid-template-columns: minmax(0, 1fr); }
+  main#layout > .col, main#layout .panel { min-width: 0; }
+  #cfg-payouts { flex: 1 1 160px; width: auto; }
+}
