@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "checks": [
+    "three desktop columns",
+    "setup and workflow highlights",
+    "first-card preview",
+    "keyboard selection and stable focus",
+    "confirmed-card visibility",
+    "real API advice",
+    "public-card preview and cancel",
+    "nine-seat responsive layouts",
+    "mobile touch selection",
+    "reduced motion",
+    "no browser errors"
+  ]
+}

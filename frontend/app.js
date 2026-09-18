@@ -86,9 +86,9 @@ function resumeIfPossible() {
 
 function showSetupWizard(loaded) {
   $("#layout").dataset.phase = "setup";
-  $("#col-table").hidden = true;
-  $("#console").hidden = true;
-  $("#advice-panel").hidden = true;
+  $("#col-table").hidden = false;
+  $("#console").hidden = false;
+  $("#advice-panel").hidden = false;
   $("#advanced-panel").hidden = true;
   $("#history-panel").hidden = true;
   $("#nextround-panel").hidden = true;
@@ -116,6 +116,7 @@ function showSetupWizard(loaded) {
   }
   rt.setup = {occupied: new Map(), heroSeatId: 1, buttonSeatId: null};
   renderSetupSeats();
+  renderDeck();
 }
 
 function downloadRaw(text) {
@@ -138,6 +139,7 @@ function renderSetupSeats() {
     rt.setup.buttonSeatId = null;
   }
   const button = rt.setup.buttonSeatId;
+  $("#setup-position-status").textContent = button ? `${button}号座 · BTN` : "待选择";
   const wrap = $("#tg-seats");
   wrap.innerHTML = `<div class="setup-table" aria-label="选择庄位">${Array.from({length: capacity}, (_, i) => {
     const sid = i + 1, xy = seatXY(i + capacity / 2, capacity);
@@ -167,6 +169,7 @@ function renderSetupSeats() {
     rt.setup.occupied.get(Number(el.dataset.name)).name = el.value;
   });
   updateSetupAmountHint();
+  renderWorkflow();
 }
 
 function amountInput(text, unit, bb, confirmRound = false) {
@@ -402,6 +405,7 @@ function refreshView() {
     onError(err) {
       rt.error = `局面更新失败：${err.message}`;
       renderConsole();
+      renderDeck();
     },
   });
   renderAll();
@@ -749,6 +753,9 @@ function renderAll() {
   $("#layout").dataset.phase = s.phase;
   $("#col-table").hidden = false;
   $("#setup-panel").hidden = true;
+  $("#setup-table-panel").hidden = true;
+  $("#table-panel").hidden = false;
+  $("#session-settings-panel").hidden = false;
   $("#console").hidden = s.phase === "ended";
   $("#advice-panel").hidden = s.phase !== "playing" && s.phase !== "ready";
   $("#advanced-panel").hidden = false;
@@ -757,6 +764,7 @@ function renderAll() {
   $("#deck-panel").hidden = s.phase === "settling" || s.phase === "ended";
   if (s.phase !== "settling") $("#settle-area").hidden = true;
   renderSessionBar();
+  renderSessionSettings();
   renderTableCaption();
   renderSeats();
   renderBoard();
@@ -768,6 +776,36 @@ function renderAll() {
   renderNextSettings();
   renderIcm();
   renderDeck();
+}
+
+function renderWorkflow() {
+  const s = rt.session;
+  const choosingHero = s?.currentHand && !s.currentHand.heroCards.every(Boolean);
+  const active = !s ? (rt.setup.buttonSeatId ? "setup-panel" : "setup-table-panel")
+    : s.phase === "ended" ? null
+    : s.phase === "settling" ? "console"
+    : choosingHero || rt.gridMode === "board" ? "deck-panel" : "console";
+  for (const el of document.querySelectorAll(".panel")) {
+    el.classList.toggle("zone-focus", el.id === active);
+  }
+  const heroTurn = s?.phase === "playing" && rt.view && !rt.view.hand_over
+    && rt.view.actor_seat_id === heroSeatOf(s) && !rt.coord?.viewPending();
+  $("#advice-panel").classList.toggle("result-focus", !!heroTurn);
+  $("#advice-panel").setAttribute("aria-busy", String(rt.adviceState === "pending"));
+}
+
+function renderSessionSettings() {
+  const s = rt.session;
+  const rows = [
+    ["桌型", `${s.capacity} 人桌`],
+    ["当前手数", `第 ${s.handNumber} 手`],
+    ["我的座位", `${heroSeatOf(s) ?? "—"}号座`],
+    ["庄位", `${s.positions.buttonSeatId}号座`],
+    ["小盲 / 大盲", `${fmtChips(s.blindLevel.sb)} / ${fmtChips(s.blindLevel.bb)}`],
+    ["每人前注", fmtChips(s.blindLevel.anteEach)],
+    ["我的手前筹码", `${fmtChips(s.occupants[s.heroOccupantId]?.confirmedChips ?? 0)} 筹码`],
+  ];
+  $("#session-settings").innerHTML = rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${esc(value)}</dd></div>`).join("");
 }
 
 function renderSessionBar() {
@@ -875,15 +913,25 @@ function renderSeats() {
 function renderBoard() {
   const slots = $("#board-slots");
   const cards = rt.view?.board || [];
+  const draft = rt.pendingOp?.op === "board" ? rt.pendingOp.cards : rt.gridMode === "board" ? rt.boardPicks : [];
   const html = [];
   for (let i = 0; i < 5; i++) {
-    const c = cards[i];
-    html.push(`<button type="button" class="slot static ${c ? "filled " + (IS_RED[c[1]] ? "red" : "black") : ""}"
-      ${c ? "" : "disabled"} aria-label="公共牌${i + 1}">${c ? `<span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span>` : "+"}</button>`);
+    const c = cards[i] || draft[i - cards.length];
+    html.push(`<span class="slot static ${c ? "filled " + (IS_RED[c[1]] ? "red" : "black") : ""}${c && i >= cards.length ? " pending" : ""}"
+      aria-label="公共牌${i + 1}${c ? " " + c : " 未发"}">${c ? `<span class="r">${c[0]}</span><span class="s">${SUIT_GLYPH[c[1]]}</span>` : "+"}</span>`);
   }
   slots.innerHTML = html.join("");
-  $("#hero-cards").innerHTML = (rt.session.currentHand?.heroCards || []).filter(Boolean).map(c =>
-    `<span class="hero-card ${IS_RED[c[1]] ? "red" : "black"}">${c[0]}${SUIT_GLYPH[c[1]]}</span>`).join("");
+  const hero = rt.session.currentHand?.heroCards?.filter(Boolean) || [];
+  const picks = hero.length === 2 ? hero : rt.heroPicks;
+  $("#hero-cards").innerHTML = [0, 1].map(i => cardPreview(picks[i])).join("");
+  $("#street-caption").textContent = rt.gridMode === "board" || rt.pendingOp?.op === "board"
+    ? `公共牌 ${draft.length} / ${nextBoardNeed()}${rt.pendingOp ? " · 更新中" : ""}`
+    : STREET_LABEL[rt.view?.street] || "待选底牌";
+}
+
+function cardPreview(card) {
+  return card ? `<span class="hero-card ${IS_RED[card[1]] ? "red" : "black"}" aria-label="${card}">${card[0]}${SUIT_GLYPH[card[1]]}</span>`
+    : '<span class="hero-card vacant" aria-label="未选择">?</span>';
 }
 
 function renderOpsLine() {
@@ -904,35 +952,45 @@ function renderOpsLine() {
 
 function renderDeck() {
   const s = rt.session;
-  if (!s || !s.currentHand) return;
   const grid = $("#card-grid");
   const taken = new Set(rt.view?.taken || []);
-  const heroCards = s.currentHand.heroCards;
-  const deckTip = $("#deck-tip");
-  if (rt.gridMode === "board") {
-    deckTip.textContent = `（选择公共牌：已选 ${rt.boardPicks.length}/${nextBoardNeed()}，选满自动发牌）`;
-  } else if (!heroCards[0] || !heroCards[1]) {
-    deckTip.textContent = "（点选你的 2 张底牌）";
-  } else {
-    deckTip.textContent = "（点“发公共牌”进入选牌）";
-  }
+  const heroCards = s?.currentHand?.heroCards || [];
   const heroDone = !!heroCards[0] && !!heroCards[1];
-  const html = [];
-  for (const suit of SUITS) {
-    for (const rank of RANKS) {
-      const card = rank + suit;
-      const isHeroPick = rt.gridMode !== "board" && (heroCards.includes(card) || rt.heroPicks.includes(card));
-      const isBoardPick = rt.gridMode === "board" && rt.boardPicks.includes(card);
-      const disabled = ["settling", "ended"].includes(s.phase) || rt.coord?.viewPending()
-        || (!isHeroPick && !isBoardPick && taken.has(card)) || (rt.gridMode !== "board" && heroDone);
-      html.push(`<button type="button" class="grid-card${IS_RED[suit] ? " red" : " black"}${isHeroPick || isBoardPick ? " picked" : ""}"
-        data-card="${card}" ${disabled ? "disabled" : ""} aria-label="选择 ${card}">${rank}${SUIT_GLYPH[suit]}</button>`);
-    }
+  const boardMode = rt.gridMode === "board" || rt.pendingOp?.op === "board";
+  const picks = boardMode ? (rt.pendingOp?.cards || rt.boardPicks) : heroDone ? heroCards : rt.heroPicks;
+  const needed = boardMode ? nextBoardNeed() : 2;
+  $("#selection-label").textContent = boardMode ? "本次公共牌" : "我的底牌";
+  $("#selection-cards").innerHTML = Array.from({length: needed}, (_, i) => cardPreview(picks[i])).join("");
+  $("#selection-count").textContent = `${picks.length} / ${needed}`;
+  const deckTip = $("#deck-tip");
+  if (!s) {
+    deckTip.textContent = "等待建桌";
+  } else if (rt.coord?.viewPending()) {
+    deckTip.textContent = "已选好 · 正在更新局面";
+  } else if (boardMode) {
+    deckTip.textContent = `公共牌 · 已选 ${picks.length}/${needed}`;
+  } else if (!heroDone) {
+    deckTip.textContent = `底牌 · 已选 ${picks.length}/2`;
+  } else {
+    deckTip.textContent = "底牌已确认 · 等待公共牌阶段";
   }
-  grid.innerHTML = html.join("");
-  for (const btn of grid.querySelectorAll(".grid-card:not([disabled])")) {
-    btn.addEventListener("click", () => onDeckPick(btn.dataset.card));
+  // Keep card buttons mounted so repeated clicks and keyboard focus stay stable.
+  if (!grid.children.length) {
+    grid.innerHTML = SUITS.flatMap(suit => RANKS.map(rank => `<button type="button" class="grid-card ${IS_RED[suit] ? "red" : "black"}"
+      data-card="${rank + suit}" aria-label="选择 ${rank + suit}">${rank}${SUIT_GLYPH[suit]}</button>`)).join("");
+    grid.addEventListener("click", e => {
+      const button = e.target.closest("[data-card]");
+      if (button && !button.disabled) onDeckPick(button.dataset.card);
+    });
   }
+  for (const btn of grid.children) {
+    const picked = picks.includes(btn.dataset.card);
+    btn.classList.toggle("picked", picked);
+    btn.setAttribute("aria-pressed", String(picked));
+    btn.disabled = !s || rt.conflict || ["settling", "ended"].includes(s.phase) || !!rt.coord?.viewPending()
+      || (!picked && taken.has(btn.dataset.card)) || (!boardMode && heroDone);
+  }
+  renderWorkflow();
 }
 
 function nextBoardNeed() {
@@ -940,6 +998,7 @@ function nextBoardNeed() {
 }
 
 function onDeckPick(card) {
+  if (!rt.session || rt.conflict || rt.committing || rt.coord?.viewPending()) return;
   if (rt.gridMode === "board") {
     if (rt.boardPicks.includes(card)) {
       rt.boardPicks = rt.boardPicks.filter((x) => x !== card);
@@ -954,6 +1013,7 @@ function onDeckPick(card) {
       return;
     }
     renderDeck();
+    renderBoard();
     return;
   }
   const hand = rt.session.currentHand;
@@ -972,6 +1032,8 @@ function onDeckPick(card) {
     return;
   }
   renderDeck();
+  renderBoard();
+  renderConsole();
 }
 
 /* --------------------------------------------------------------- 操作台 */
@@ -979,6 +1041,7 @@ function onDeckPick(card) {
 function setStatus(msg) { $("#status-line").textContent = msg; }
 
 function renderConsole() {
+  renderWorkflow();
   const s = rt.session;
   if (!s) return;
   const area = $("#action-area");
@@ -1000,7 +1063,7 @@ function renderConsole() {
   }
   if (!hand) return;
   if (!hand.heroCards[0] || !hand.heroCards[1]) {
-    setStatus("请选择你的 2 张底牌。");
+    setStatus(`底牌已选 ${rt.heroPicks.length}/2${rt.heroPicks.length ? " · 还差 1 张" : ""}`);
     area.innerHTML = '<button type="button" class="ghost-btn" id="manual-close-empty">本手未完整记录，核对余额</button>';
     $("#manual-close-empty").onclick = onManualClose;
     return;
@@ -1091,6 +1154,7 @@ function onActButton(spec) {
   if (action === "manual-close") return onManualClose();
   if (action === "cancel-board") {
     rt.gridMode = null; rt.boardPicks = []; renderDeck(); renderConsole();
+    renderBoard();
     areaFocus(); return;
   }
   if (action === "deal-board") {
@@ -1098,6 +1162,7 @@ function onActButton(spec) {
     rt.boardPicks = [];
     $("#deck-panel").open = true;
     renderDeck();
+    renderBoard();
     renderConsole();
     $("#deck-panel").scrollIntoView({ behavior: "instant", block: "nearest" });
   }
@@ -1109,6 +1174,7 @@ function areaFocus() {
 }
 
 function renderAdvice() {
+  renderWorkflow();
   const s = rt.session;
   const box = $("#advice");
   const note = $("#advice-note");
