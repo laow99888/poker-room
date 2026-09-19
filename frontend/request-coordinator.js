@@ -3,7 +3,7 @@
 // 不自行改变牌桌成员，不做 DOM 渲染——由调用方在守卫通过的回调里写状态。
 "use strict";
 
-import { newId } from "./session.js";
+import { newId } from "./session.js?v=startup-20260919-1";
 
 function sourceOf(session) {
   return {
@@ -62,6 +62,8 @@ export function createCoordinator(session, getHeaders = null) {
       const captured = viewReq;
       (async () => {
         let notifyDone = false;
+        let timedOut = false;
+        const timer = controller ? setTimeout(() => { timedOut = true; controller.abort(); }, 15000) : null;
         try {
           const res = await fetch("/api/hand/v2/view", {
             method: "POST",
@@ -89,8 +91,9 @@ export function createCoordinator(session, getHeaders = null) {
           viewReq = null;
           if (!stillCurrent(live, captured)) return;
           notifyDone = true;
-          if (hooks.onError) hooks.onError(err);
+          if (hooks.onError) hooks.onError(timedOut ? new Error("局面更新超时，动作尚未确认，请重试") : err);
         } finally {
+          if (timer !== null) clearTimeout(timer);
           if (notifyDone && !viewReq && hooks.onDone) hooks.onDone();
         }
       })();

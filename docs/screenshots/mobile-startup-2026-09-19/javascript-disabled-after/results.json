@@ -1,0 +1,28 @@
+{
+  "passed": true,
+  "errors": [],
+  "responses": [
+    {
+      "path": "/app.html",
+      "status": 200,
+      "type": "text/html; charset=utf-8"
+    },
+    {
+      "path": "/style.css?v=startup-20260919-1",
+      "status": 200,
+      "type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/favicon.ico",
+      "status": 404,
+      "type": "application/json"
+    }
+  ],
+  "state": {
+    "buttons": 0,
+    "cards": 0,
+    "hint": "",
+    "startup": "正在加载牌桌；若长时间没有座位和牌库，请重新加载。",
+    "detail": ""
+  }
+}

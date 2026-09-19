@@ -1,0 +1,172 @@
+{
+  "error": "TimeoutError: Waiting failed: 18000ms exceeded\n    at new WaitTask (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/common/WaitTask.js:46:34)\n    at IsolatedWorld.waitForFunction (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/api/Realm.js:49:26)\n    at CdpFrame.waitForFunction (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/api/Frame.js:580:43)\n    at CdpFrame.<anonymous> (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/util/decorators.js:101:27)\n    at CdpPage.waitForFunction (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/api/Page.js:1447:37)\n    at file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/deep-edges.e2e.mjs:86:16\n    at async run (file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/deep-edges.e2e.mjs:37:5)\n    at async file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/deep-edges.e2e.mjs:78:52",
+  "errors": [],
+  "state": {
+    "schemaVersion": 1,
+    "sessionId": "s-1b686127-70c7-4319-bf5a-c4fb04ad36ce",
+    "sessionRevision": 2,
+    "phase": "ready",
+    "capacity": 6,
+    "seats": [
+      {
+        "id": 1,
+        "occupantId": "p-77f3648c-c8ec-4e36-8b46-87c0b28bf575"
+      },
+      {
+        "id": 2,
+        "occupantId": "p-babe64bc-ef79-436a-8d54-db6b8e75c181"
+      },
+      {
+        "id": 3,
+        "occupantId": "p-a8d2aec6-bfb3-48c9-8476-32916502c56b"
+      },
+      {
+        "id": 4,
+        "occupantId": "p-c563c3c5-d3df-49c6-8696-e3664fa49053"
+      },
+      {
+        "id": 5,
+        "occupantId": "p-2426fb60-201d-4865-a2d4-7ccf1f3d6e6b"
+      },
+      {
+        "id": 6,
+        "occupantId": "p-0fcc1e02-ef72-41aa-acc1-66c266c36eaf"
+      }
+    ],
+    "occupants": {
+      "p-77f3648c-c8ec-4e36-8b46-87c0b28bf575": {
+        "id": "p-77f3648c-c8ec-4e36-8b46-87c0b28bf575",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": false
+      },
+      "p-babe64bc-ef79-436a-8d54-db6b8e75c181": {
+        "id": "p-babe64bc-ef79-436a-8d54-db6b8e75c181",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      },
+      "p-a8d2aec6-bfb3-48c9-8476-32916502c56b": {
+        "id": "p-a8d2aec6-bfb3-48c9-8476-32916502c56b",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      },
+      "p-c563c3c5-d3df-49c6-8696-e3664fa49053": {
+        "id": "p-c563c3c5-d3df-49c6-8696-e3664fa49053",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      },
+      "p-2426fb60-201d-4865-a2d4-7ccf1f3d6e6b": {
+        "id": "p-2426fb60-201d-4865-a2d4-7ccf1f3d6e6b",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      },
+      "p-0fcc1e02-ef72-41aa-acc1-66c266c36eaf": {
+        "id": "p-0fcc1e02-ef72-41aa-acc1-66c266c36eaf",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      }
+    },
+    "heroOccupantId": "p-77f3648c-c8ec-4e36-8b46-87c0b28bf575",
+    "blindLevel": {
+      "sb": 100,
+      "bb": 200,
+      "anteEach": 25
+    },
+    "displayUnit": "chips",
+    "learningEnabled": false,
+    "icm": {
+      "scope": "off",
+      "payouts": [],
+      "rosterConfirmed": false
+    },
+    "positions": {
+      "buttonSeatId": 6,
+      "smallBlindSeatId": 1,
+      "bigBlindSeatId": 2,
+      "source": "manual",
+      "confirmed": false
+    },
+    "previousBigBlindOccupantId": null,
+    "previousBigBlindSeatId": null,
+    "handNumber": 1,
+    "currentHand": {
+      "handId": "h-fbc90ecb-8abc-42a8-a7db-dd48a42f9b73",
+      "handNumber": 1,
+      "context": {
+        "session_id": "s-1b686127-70c7-4319-bf5a-c4fb04ad36ce",
+        "capacity": 6,
+        "hero_occupant_id": "p-77f3648c-c8ec-4e36-8b46-87c0b28bf575",
+        "participants": [
+          {
+            "seat_id": 1,
+            "occupant_id": "p-77f3648c-c8ec-4e36-8b46-87c0b28bf575",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 2,
+            "occupant_id": "p-babe64bc-ef79-436a-8d54-db6b8e75c181",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 3,
+            "occupant_id": "p-a8d2aec6-bfb3-48c9-8476-32916502c56b",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 4,
+            "occupant_id": "p-c563c3c5-d3df-49c6-8696-e3664fa49053",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 5,
+            "occupant_id": "p-2426fb60-201d-4865-a2d4-7ccf1f3d6e6b",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 6,
+            "occupant_id": "p-0fcc1e02-ef72-41aa-acc1-66c266c36eaf",
+            "starting_chips": 10000
+          }
+        ],
+        "button_seat_id": 6,
+        "small_blind_seat_id": 1,
+        "big_blind_seat_id": 2,
+        "blinds": {
+          "sb": 100,
+          "bb": 200,
+          "ante_each": 25
+        },
+        "learning_enabled": false,
+        "profile_names": {},
+        "icm": {
+          "scope": "off",
+          "payouts": []
+        }
+      },
+      "heroCards": [
+        null,
+        null
+      ],
+      "ops": [],
+      "revision": 2,
+      "recordQuality": "complete",
+      "manualCloseReason": null
+    },
+    "settlementDraft": null,
+    "nextHandDraft": null,
+    "lastCommit": null,
+    "recentHands": [],
+    "learningJobs": {}
+  }
+}

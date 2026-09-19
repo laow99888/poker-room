@@ -1,0 +1,236 @@
+{
+  "error": "TimeoutError: Waiting for selector `#settle-estimated` failed\n    at CSSQueryHandler.waitFor (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/common/QueryHandler.js:211:46)\n    at async CdpFrame.waitForSelector (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/api/Frame.js:541:21)\n    at async CdpPage.waitForSelector (file:///C:/Users/Administrator/.codex/skills/chrome-devtools/scripts/node_modules/puppeteer-core/lib/esm/puppeteer/api/Page.js:1387:20)\n    at async click (file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/deep-edges.e2e.mjs:14:14)\n    at async file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/deep-edges.e2e.mjs:52:5\n    at async run (file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/deep-edges.e2e.mjs:37:5)\n    at async file:///C:/Users/Administrator/.zcode/workspace/default/poker-tools/tests/browser/deep-edges.e2e.mjs:47:3",
+  "errors": [],
+  "state": {
+    "schemaVersion": 1,
+    "sessionId": "s-4e9b5f3e-8517-45ff-9138-550e0616e0cf",
+    "sessionRevision": 3,
+    "phase": "settling",
+    "capacity": 6,
+    "seats": [
+      {
+        "id": 1,
+        "occupantId": "p-248d1fcc-f7e1-4615-8218-5c5ae6f5c0f9"
+      },
+      {
+        "id": 2,
+        "occupantId": "p-d30735be-27fb-4094-9886-bf4e6cb8976e"
+      },
+      {
+        "id": 3,
+        "occupantId": "p-611e5a1b-270b-4666-a311-2d76e460259c"
+      },
+      {
+        "id": 4,
+        "occupantId": "p-ac0190c7-f5b2-4513-b39b-6c19251f7c3a"
+      },
+      {
+        "id": 5,
+        "occupantId": "p-0a2002ab-123b-4338-87f0-3c7752f6ab24"
+      },
+      {
+        "id": 6,
+        "occupantId": "p-e9e5d6cd-3db3-4a9f-a108-12fdbf5ff94c"
+      }
+    ],
+    "occupants": {
+      "p-248d1fcc-f7e1-4615-8218-5c5ae6f5c0f9": {
+        "id": "p-248d1fcc-f7e1-4615-8218-5c5ae6f5c0f9",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": false
+      },
+      "p-d30735be-27fb-4094-9886-bf4e6cb8976e": {
+        "id": "p-d30735be-27fb-4094-9886-bf4e6cb8976e",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      },
+      "p-611e5a1b-270b-4666-a311-2d76e460259c": {
+        "id": "p-611e5a1b-270b-4666-a311-2d76e460259c",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      },
+      "p-ac0190c7-f5b2-4513-b39b-6c19251f7c3a": {
+        "id": "p-ac0190c7-f5b2-4513-b39b-6c19251f7c3a",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      },
+      "p-0a2002ab-123b-4338-87f0-3c7752f6ab24": {
+        "id": "p-0a2002ab-123b-4338-87f0-3c7752f6ab24",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      },
+      "p-e9e5d6cd-3db3-4a9f-a108-12fdbf5ff94c": {
+        "id": "p-e9e5d6cd-3db3-4a9f-a108-12fdbf5ff94c",
+        "status": "active",
+        "confirmedChips": 10000,
+        "profileName": null,
+        "chipsEstimated": true
+      }
+    },
+    "heroOccupantId": "p-248d1fcc-f7e1-4615-8218-5c5ae6f5c0f9",
+    "blindLevel": {
+      "sb": 100,
+      "bb": 200,
+      "anteEach": 25
+    },
+    "displayUnit": "chips",
+    "learningEnabled": false,
+    "icm": {
+      "scope": "off",
+      "payouts": [],
+      "rosterConfirmed": false
+    },
+    "positions": {
+      "buttonSeatId": 6,
+      "smallBlindSeatId": 1,
+      "bigBlindSeatId": 2,
+      "source": "manual",
+      "confirmed": false
+    },
+    "previousBigBlindOccupantId": null,
+    "previousBigBlindSeatId": null,
+    "handNumber": 1,
+    "currentHand": {
+      "handId": "h-5027656a-a749-4e11-8ed0-9e66acc00478",
+      "handNumber": 1,
+      "context": {
+        "session_id": "s-4e9b5f3e-8517-45ff-9138-550e0616e0cf",
+        "capacity": 6,
+        "hero_occupant_id": "p-248d1fcc-f7e1-4615-8218-5c5ae6f5c0f9",
+        "participants": [
+          {
+            "seat_id": 1,
+            "occupant_id": "p-248d1fcc-f7e1-4615-8218-5c5ae6f5c0f9",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 2,
+            "occupant_id": "p-d30735be-27fb-4094-9886-bf4e6cb8976e",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 3,
+            "occupant_id": "p-611e5a1b-270b-4666-a311-2d76e460259c",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 4,
+            "occupant_id": "p-ac0190c7-f5b2-4513-b39b-6c19251f7c3a",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 5,
+            "occupant_id": "p-0a2002ab-123b-4338-87f0-3c7752f6ab24",
+            "starting_chips": 10000
+          },
+          {
+            "seat_id": 6,
+            "occupant_id": "p-e9e5d6cd-3db3-4a9f-a108-12fdbf5ff94c",
+            "starting_chips": 10000
+          }
+        ],
+        "button_seat_id": 6,
+        "small_blind_seat_id": 1,
+        "big_blind_seat_id": 2,
+        "blinds": {
+          "sb": 100,
+          "bb": 200,
+          "ante_each": 25
+        },
+        "learning_enabled": false,
+        "profile_names": {},
+        "icm": {
+          "scope": "off",
+          "payouts": []
+        }
+      },
+      "heroCards": [
+        null,
+        null
+      ],
+      "ops": [],
+      "revision": 3,
+      "recordQuality": "manual_close",
+      "manualCloseReason": "自己弃牌，后续未完整记录",
+      "quickFold": true
+    },
+    "settlementDraft": {
+      "sourceHandId": "h-5027656a-a749-4e11-8ed0-9e66acc00478",
+      "sourceRevision": 3,
+      "rows": [
+        {
+          "seatId": 1,
+          "occupantId": "p-248d1fcc-f7e1-4615-8218-5c5ae6f5c0f9",
+          "finalChips": 9875,
+          "source": "engine_verified",
+          "confirmed": false
+        },
+        {
+          "seatId": 2,
+          "occupantId": "p-d30735be-27fb-4094-9886-bf4e6cb8976e",
+          "finalChips": null,
+          "source": "pending",
+          "confirmed": false
+        },
+        {
+          "seatId": 3,
+          "occupantId": "p-611e5a1b-270b-4666-a311-2d76e460259c",
+          "finalChips": 10000,
+          "source": "estimated",
+          "confirmed": false
+        },
+        {
+          "seatId": 4,
+          "occupantId": "p-ac0190c7-f5b2-4513-b39b-6c19251f7c3a",
+          "finalChips": 10000,
+          "source": "estimated",
+          "confirmed": false
+        },
+        {
+          "seatId": 5,
+          "occupantId": "p-0a2002ab-123b-4338-87f0-3c7752f6ab24",
+          "finalChips": 10000,
+          "source": "estimated",
+          "confirmed": false
+        },
+        {
+          "seatId": 6,
+          "occupantId": "p-e9e5d6cd-3db3-4a9f-a108-12fdbf5ff94c",
+          "finalChips": 10000,
+          "source": "estimated",
+          "confirmed": false
+        }
+      ],
+      "adjustmentReason": null,
+      "differenceAccepted": false
+    },
+    "nextHandDraft": {
+      "rosterEdits": [],
+      "blindLevel": {
+        "sb": 100,
+        "bb": 200,
+        "anteEach": 25
+      },
+      "positions": null,
+      "learningEnabled": false,
+      "icm": {
+        "scope": "off",
+        "payouts": [],
+        "rosterConfirmed": false
+      }
+    },
+    "lastCommit": null,
+    "recentHands": [],
+    "learningJobs": {}
+  }
+}

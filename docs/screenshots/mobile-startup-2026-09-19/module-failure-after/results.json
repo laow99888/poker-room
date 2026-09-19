@@ -1,0 +1,33 @@
+{
+  "passed": true,
+  "errors": [
+    "/app.js: net::ERR_FAILED"
+  ],
+  "responses": [
+    {
+      "path": "/app.html",
+      "status": 200,
+      "type": "text/html; charset=utf-8"
+    },
+    {
+      "path": "/style.css?v=20260923qf",
+      "status": 200,
+      "type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/startup.js?v=startup-20260919-1",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8"
+    },
+    {
+      "path": "/favicon.ico",
+      "status": 404,
+      "type": "application/json"
+    }
+  ],
+  "state": {
+    "buttons": 0,
+    "cards": 0,
+    "hint": ""
+  }
+}

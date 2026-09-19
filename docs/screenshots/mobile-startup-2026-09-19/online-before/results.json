@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "errors": [],
+  "responses": [
+    {
+      "path": "/app.html",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "cache": "DYNAMIC"
+    },
+    {
+      "path": "/style.css?v=20260923qf",
+      "status": 200,
+      "type": "text/css; charset=utf-8",
+      "cache": "REVALIDATED"
+    },
+    {
+      "path": "/app.js?v=20260923qf",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "cache": "REVALIDATED"
+    },
+    {
+      "path": "/request-coordinator.js",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "cache": "REVALIDATED"
+    },
+    {
+      "path": "/session-storage.js",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "cache": "REVALIDATED"
+    },
+    {
+      "path": "/session.js",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "cache": "REVALIDATED"
+    },
+    {
+      "path": "/cdn-cgi/rum",
+      "status": 204,
+      "type": "text/plain"
+    },
+    {
+      "path": "/favicon.ico",
+      "status": 404,
+      "type": "application/json",
+      "cache": "EXPIRED"
+    }
+  ],
+  "state": {
+    "buttons": 6,
+    "cards": 52,
+    "hint": "建桌失败：请点选本手庄位"
+  }
+}

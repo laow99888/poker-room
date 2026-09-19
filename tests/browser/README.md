@@ -1,5 +1,13 @@
 # 浏览器验收
 
+启动专项：`node tests/browser/startup.e2e.mjs`。用`POKER_STARTUP_SCENARIO`选择`normal`、`old-dependency`、`module-failure`、`syntax-failure`、`unsupported`、`bootstrap-failure`、`javascript-disabled`、`stalled`；`POKER_STARTUP_OUTPUT`指定独立证据目录。验证手机空壳、旧依赖缓存、可见报错与恢复，线上检查和本地故障注入须分别记录；详情见`docs/plans/tournament-session/MOBILE-STARTUP-2026-09-19.md`。
+
+连续千手专项：`node tests/browser/soak.e2e.mjs`，默认在同一9人桌操作1000手（950手快捷弃牌、50手输入现场余额），独立核算自己的强制投入，穿插40次单人校准、25次刷新、10次升盲和手机/电脑切换。校验手号、身份、历史快照、估算来源、禁止学习写入及存档恢复；每100手输出检查点和截图。`POKER_SOAK_HANDS` 可缩短调试运行，`POKER_SOAK_OUTPUT` 指定证据目录。约需12分钟，包含防连点等待，不代表推演耗时。
+
+深度操作边界：`node tests/browser/deep-edges.e2e.mjs`，覆盖清空金额后恢复估算、修改淘汰结果后的人员草稿撤销、强制全下拦截，以及快捷弃牌/prepare/view真实请求挂起15秒后的恢复与重试。`POKER_EDGES_OUTPUT` 指定输出；`POKER_EDGES_CASE` 可单独选择用例。上述两项均需下述隔离服务，不包含在聚合脚本的浏览器部分。
+
+完整牌局随机回归：`python -m pytest tests/test_playthrough_stress.py -q`，固定种子的120手真实API回放，覆盖6/8/9容量、2–9实际人数、空座/空小盲、短筹码、跟注/过牌/加注/全下到摊牌，检查每步筹码守恒、同牌谱重放一致及未知摊牌不被当成实际赢家。此项已由常规pytest收集。
+
 快捷弃牌专项：`node tests/browser/quick-fold.e2e.mjs`，沿用下述隔离服务与Puppeteer配置。覆盖6/8/9座在桌面及手机的一整圈弃牌、单人校准、估算延续、未选牌弃牌、跟注后弃牌、已弃牌续手、防连点、网络/保存失败、刷新及多标签冲突。`POKER_QUICK_OUTPUT` 可指定输出，默认 `docs/screenshots/quick-fold-2026-09-19/quick/`。本专项需单独运行。
 
 使用独立浏览器和隔离统计服务，不连接日常浏览器，不写用户的 opponents.json。

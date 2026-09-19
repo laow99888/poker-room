@@ -14,9 +14,9 @@ import {
   previewNextPositions, automaticNextPositions, normalizePositions, rolesForSeat,
   heroSeatOf, rangePositionFor, buildHandContext, DomainError,
   pendingLearningJobs, markLearningJob, previewRoster, assertCommitCurrent, activeSeats,
-} from "./session.js";
-import * as Store from "./session-storage.js";
-import { createCoordinator } from "./request-coordinator.js";
+} from "./session.js?v=startup-20260919-1";
+import * as Store from "./session-storage.js?v=startup-20260919-1";
+import { createCoordinator } from "./request-coordinator.js?v=startup-20260919-1";
 
 /* --------------------------------------------------------------- 基础工具 */
 
@@ -284,14 +284,24 @@ async function prepareContext(session, handId, handNumber) {
 }
 
 async function prepareRaw(body) {
-  const res = await fetch("/api/table/prepare", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-  return data;
+  return postTable("/api/table/prepare", body);
+}
+
+async function postTable(url, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(url, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body), signal: controller.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    return data;
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("请求超时，尚未进入下一手，请重试");
+    throw error;
+  } finally { clearTimeout(timer); }
 }
 
 /* ------------------------------------------------------------- 保存状态 */
@@ -517,13 +527,10 @@ async function onQuickFold(review = false) {
   renderAll();
   let failure = "";
   try {
-    const response = await fetch("/api/table/quick-fold", {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify(viewPayload(source.currentHand.ops))});
-    const body = await response.json();
+    const body = await postTable("/api/table/quick-fold", viewPayload(source.currentHand.ops));
     if (rt.conflict || rt.session !== source || JSON.stringify(source) !== fingerprint) {
       throw new Error("本手已变化，未执行快捷弃牌");
     }
-    if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
     if (body.hand_id !== source.currentHand.handId) throw new Error("弃牌结果与本手不匹配");
     const candidate = structuredClone(source);
     closeQuickFold(candidate, body.rows);
@@ -602,8 +609,8 @@ function renderSettle() {
       <tbody>${rows}</tbody></table></div>
     <div class="settle-tools">
       <button type="button" class="ghost-btn" data-action="confirm-current">确认当前填写值</button>
-      ${draft.rows.some(row => row.finalChips === null && row.occupantId !== s.heroOccupantId)
-        ? '<button type="button" class="ghost-btn" id="settle-estimated">未填对手沿用估算</button>' : ""}
+      <button type="button" class="ghost-btn" id="settle-estimated"
+        ${draft.rows.some(row => row.finalChips === null && row.occupantId !== s.heroOccupantId) ? "" : "hidden"}>未填对手沿用估算</button>
       <span id="settle-totals">${deltaLine}</span>
     </div>
     <div class="setup-row" id="settle-diff-row" ${v.delta === 0 || v.hasEstimates ? "hidden" : ""}>
@@ -637,6 +644,7 @@ function bindSettleEvents(area) {
       : draft.rows.some(r => r.finalChips === null) ? "有余额待核对" : `合计 ${fmtChips(check.finalSum)} · 差额 ${fmtChips(check.delta)}`;
     $("#settle-diff-row").hidden = check.delta === 0 || check.hasEstimates;
     $("#settle-accept").checked = false;
+    $("#settle-estimated").hidden = !draft.rows.some(row => row.finalChips === null && row.occupantId !== rt.session.heroOccupantId);
     input.closest("tr").lastElementChild.textContent = value === null || !valid ? "待核对" : chipsToBBText(value, rt.session.blindLevel.bb) + " BB";
     input.closest("tr").querySelector(".src-tag").textContent = value === null || !valid ? "待核对" : "手工";
     renderRosterEditor($("#roster-area"));
@@ -693,9 +701,19 @@ function showSettleError(msg) {
 function renderRosterEditor(container) {
   const s = rt.session;
   s.nextHandDraft ??= emptyNextHandDraft(s);
+  const resetRoster = () => {
+    s.nextHandDraft.rosterEdits = []; s.nextHandDraft.positions = null;
+    persist(); showSettleError(""); renderRosterEditor(container);
+  };
   let candidate;
   try { candidate = previewRoster(s, s.nextHandDraft.rosterEdits); }
-  catch (e) { container.textContent = e.message; return; }
+  catch (e) {
+    container.innerHTML = '<p class="form-error" role="alert"></p><button type="button" class="ghost-btn" id="roster-reset">撤销本次人员变动</button>';
+    container.querySelector("p").textContent = e.message;
+    container.querySelector("#roster-reset").onclick = resetRoster;
+    updateCommitLabel();
+    return;
+  }
   container.innerHTML = `<div class="tg-seats" id="roster-rows">${candidate.seats.map(seat => {
     const occ = candidate.occupants[seat.occupantId];
     if (!occ || occ.status !== "active") return `<div class="tg-seat-row"><span>${seat.id}号座 · 空位</span>
@@ -726,9 +744,7 @@ function renderRosterEditor(container) {
     const target = window.prompt("移到哪个空座位？");
     if (target) apply({type: "move", occupantId: btn.dataset.occ, targetSeatId: Number(target)});
   });
-  container.querySelector("#roster-reset").onclick = () => {
-    s.nextHandDraft.rosterEdits = []; s.nextHandDraft.positions = null; persist(); renderRosterEditor(container);
-  };
+  container.querySelector("#roster-reset").onclick = resetRoster;
   renderPositionPreview(container.querySelector("#position-preview"));
   updateCommitLabel();
 }
@@ -1495,7 +1511,7 @@ function renderAdvanced() {
     });
     wrap.querySelector("#tg-end-session").addEventListener("click", () => {
       if (!window.confirm("结束当前牌桌？已确认的余额与本桌记录将保留。")) return;
-      import("./session.js").then((S) => {
+      import("./session.js?v=startup-20260919-1").then((S) => {
         S.endSession(rt.session);
         rt.coord.resync(rt.session);
         persist();
@@ -1585,8 +1601,21 @@ function bindGlobal() {
   Store.onStorageChange(newValue => { if (newValue !== rt.expectedRaw) showConflict(); });
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
-} else {
-  init();
+function startApp() {
+  if (window.PaishiStartup?.supported === false) return;
+  try {
+    init();
+    if (window.PaishiStartup) window.PaishiStartup.ready();
+    else {
+      $("#tg-create").disabled = false;
+      const startupStatus = $("#startup-status");
+      if (startupStatus) startupStatus.hidden = true;
+    }
+  } catch (error) {
+    window.PaishiStartup?.fail(error.message);
+    throw error;
+  }
 }
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startApp);
+else startApp();

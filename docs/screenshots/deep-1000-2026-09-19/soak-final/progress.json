@@ -1,0 +1,96 @@
+{
+  "completed": 1000,
+  "hands": 1000,
+  "checkpoints": [
+    {
+      "completed": 100,
+      "heroChips": 996825,
+      "elapsedMs": 72502,
+      "storageBytes": 225830,
+      "nodes": 6247,
+      "heapBytes": 18269724,
+      "last100MeanMs": 692
+    },
+    {
+      "completed": 200,
+      "heroChips": 993540,
+      "elapsedMs": 143011,
+      "storageBytes": 225940,
+      "nodes": 9142,
+      "heapBytes": 13196076,
+      "last100MeanMs": 674
+    },
+    {
+      "completed": 300,
+      "heroChips": 989825,
+      "elapsedMs": 215021,
+      "storageBytes": 225940,
+      "nodes": 5136,
+      "heapBytes": 29481132,
+      "last100MeanMs": 689
+    },
+    {
+      "completed": 400,
+      "heroChips": 985920,
+      "elapsedMs": 289306,
+      "storageBytes": 225940,
+      "nodes": 6888,
+      "heapBytes": 35615140,
+      "last100MeanMs": 712
+    },
+    {
+      "completed": 500,
+      "heroChips": 981565,
+      "elapsedMs": 367526,
+      "storageBytes": 225941,
+      "nodes": 10905,
+      "heapBytes": 18010348,
+      "last100MeanMs": 751
+    },
+    {
+      "completed": 600,
+      "heroChips": 977040,
+      "elapsedMs": 437907,
+      "storageBytes": 225941,
+      "nodes": 9148,
+      "heapBytes": 43747164,
+      "last100MeanMs": 673
+    },
+    {
+      "completed": 700,
+      "heroChips": 972045,
+      "elapsedMs": 516784,
+      "storageBytes": 225941,
+      "nodes": 6266,
+      "heapBytes": 19293176,
+      "last100MeanMs": 759
+    },
+    {
+      "completed": 800,
+      "heroChips": 966900,
+      "elapsedMs": 587309,
+      "storageBytes": 225941,
+      "nodes": 6888,
+      "heapBytes": 35371176,
+      "last100MeanMs": 674
+    },
+    {
+      "completed": 900,
+      "heroChips": 961265,
+      "elapsedMs": 659564,
+      "storageBytes": 225941,
+      "nodes": 6266,
+      "heapBytes": 19794160,
+      "last100MeanMs": 690
+    },
+    {
+      "completed": 1000,
+      "heroChips": 955120,
+      "elapsedMs": 729610,
+      "storageBytes": 225944,
+      "nodes": 8018,
+      "heapBytes": 25436984,
+      "last100MeanMs": 671
+    }
+  ]
+}

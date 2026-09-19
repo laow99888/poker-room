@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>大魔丸 · 锦标赛逐手记录与局面推演</title>
-<link rel="stylesheet" href="style.css?v=20260923qf">
+<link rel="stylesheet" href="style.css?v=startup-20260919-1">
 </head>
 <body>
 <div class="felt-vignette" aria-hidden="true"></div>
@@ -18,6 +18,12 @@
     <span id="bar-main-slot"></span>
   </div>
 </header>
+<div id="startup-status" class="panel" role="status" aria-live="polite">
+  <p id="startup-message">正在加载牌桌；若长时间没有座位和牌库，请重新加载。</p>
+  <p id="startup-detail" class="form-error"></p>
+  <button type="button" id="startup-reload" class="ghost-btn" onclick="location.reload()">重新加载</button>
+</div>
+<noscript><p class="form-error" role="alert">浏览器已禁用 JavaScript，无法启动牌桌。请允许本站运行 JavaScript。</p></noscript>
 <div id="conflict-banner" class="form-error" role="alert" hidden>
   其他标签页已更新牌桌，本页已暂停。
   <button type="button" onclick="location.reload()">载入最新记录</button>
@@ -63,7 +69,7 @@
 
       <div id="tg-preview" class="tg-preview" hidden></div>
       <div id="setup-error" class="form-error" role="alert"></div>
-      <button type="button" class="primary-btn" id="tg-create" data-action="create-table">开始第 1 手</button>
+      <button type="button" class="primary-btn" id="tg-create" data-action="create-table" disabled>开始第 1 手</button>
       <button type="button" class="primary-btn" id="tg-confirm" data-action="confirm-table" hidden>确认建桌，开始第 1 手</button>
     </div>
 
@@ -164,6 +170,7 @@
 
 <div id="modal-root"></div>
 
-<script type="module" src="app.js?v=20260923qf"></script>
+<script src="startup.js?v=startup-20260919-1"></script>
+<script id="app-module" type="module" src="app.js?v=startup-20260919-1"></script>
 </body>
 </html>

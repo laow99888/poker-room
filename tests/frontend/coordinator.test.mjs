@@ -47,6 +47,28 @@ function gatedFetch(status = 200, body = null) {
 
 const session = makeSession();
 
+for (const stalledBody of [false, true]) test(`view timeout releases pending state (${stalledBody ? 'body' : 'headers'}) without committing`, async t => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const s = makeSession(), before = structuredClone(s), coord = createCoordinator(s), events = [];
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    const stalled = new Promise((_, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+    return stalledBody ? {ok: true, json: () => stalled} : stalled;
+  });
+  coord.submitView(s, {}, {onAccept: () => events.push('accepted'), onError: e => events.push(e.message)});
+  await Promise.resolve();
+  assert.equal(coord.viewPending(), true);
+  t.mock.timers.tick(15000);
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.equal(coord.viewPending(), false);
+  assert.equal(events.length, 1);
+  assert.match(events[0], /超时/);
+  assert.deepEqual(s, before);
+  t.mock.method(globalThis, 'fetch', async () => okView(s));
+  coord.submitView(s, {}, {onAccept: () => events.push('retry accepted')});
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.equal(events.at(-1), 'retry accepted');
+});
+
 test("S-07/U-07 view 响应头到、正文未到时推进版本：旧正文不写入", async () => {
   const gate = gatedFetch(200, okView(session));
   const coord = createCoordinator(session);

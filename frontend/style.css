@@ -431,6 +431,8 @@ main#layout #col-table[hidden], main#layout #col-side[hidden] { display: none; }
 .switch-line { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
 .form-error { color: var(--bad); font-size: 13px; margin: 8px 0; }
 .form-error[hidden] { display: none; }
+#startup-status { max-width: 1600px; margin: 0 auto 16px; }
+#startup-detail { overflow-wrap: anywhere; }
 .primary-btn {
   display: inline-block; width: 100%; margin-top: 8px; cursor: pointer;
   background: linear-gradient(180deg, #e4bd63, #a8842f); color: #211804;

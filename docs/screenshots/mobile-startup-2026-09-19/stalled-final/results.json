@@ -1,0 +1,28 @@
+{
+  "passed": true,
+  "errors": [],
+  "responses": [
+    {
+      "path": "/app.html",
+      "status": 200,
+      "type": "text/html; charset=utf-8"
+    },
+    {
+      "path": "/style.css?v=startup-20260919-1",
+      "status": 200,
+      "type": "text/css; charset=utf-8"
+    },
+    {
+      "path": "/startup.js?v=startup-20260919-1",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8"
+    }
+  ],
+  "state": {
+    "buttons": 0,
+    "cards": 0,
+    "hint": "",
+    "startup": "牌桌加载失败，请重新加载。若仍失败，请反馈下方错误信息。",
+    "detail": "等待脚本启动超时，请检查网络或浏览器是否拦截脚本"
+  }
+}
