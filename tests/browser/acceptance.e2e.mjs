@@ -68,6 +68,8 @@ async function setup({capacity=6,button=6,seats=null,learning=false,payouts=''}=
   await page.select('#tg-capacity',String(capacity));
   if(learning||payouts) {await open('.setup-extras');if(learning) await click('#tg-learning');if(payouts) await fill('#tg-payouts',payouts);}
   if(seats) {await open('#setup-roster');for(let sid=2;sid<=capacity;sid++) if(!seats.includes(sid)&&await page.$eval(`[data-occupied="${sid}"]`,e=>e.checked)) await click(`[data-occupied="${sid}"]`);}
+  // Learning fixtures require observed starting balances, not the default estimates.
+  if(learning) {await open('#setup-roster');for(let sid=2;sid<=capacity;sid++) if(!seats||seats.includes(sid)) await fill(`[data-chips="${sid}"]`,10000);}
   await click(`[data-button="${button}"]`);await click('#tg-create');await waitState(1,'ready');
 }
 async function cards() {await open('#deck-panel');await click('[data-card="As"]');await click('[data-card="Ad"]');await page.waitForSelector('[data-act^="call:"]:not([disabled])');}

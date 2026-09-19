@@ -79,7 +79,12 @@ export function validateSchema(data) {
       || job.payload.ops.some(value => !op(value)))) errors.push("学习任务非法");
   if (data.settlementDraft && list(data.settlementDraft.rows).some(row => !object(row)
       || !Number.isInteger(row.seatId) || typeof row.occupantId !== "string"
+      || !["pending", "manual", "engine_verified", "estimated"].includes(row.source)
       || (row.finalChips !== null && !chips(row.finalChips)))) errors.push("结算行非法");
+  if (hand?.quickFold !== undefined && typeof hand.quickFold !== "boolean") errors.push("快捷弃牌标记非法");
+  if (list(data.recentHands).some(h => object(h) && h.estimatedOccupantIds !== undefined
+      && (!Array.isArray(h.estimatedOccupantIds) || h.estimatedOccupantIds.some(id =>
+        typeof id !== "string" || !list(h.context?.participants).some(p => p?.occupant_id === id))))) errors.push("历史估算标记非法");
   if (data.nextHandDraft && list(data.nextHandDraft.rosterEdits).some(edit => !object(edit)
       || !["enter", "leave", "move"].includes(edit.type))) errors.push("人员草稿非法");
   return { ok: errors.length === 0, errors };

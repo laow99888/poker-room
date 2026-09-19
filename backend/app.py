@@ -283,12 +283,26 @@ def _v2_hand(body: dict, request: Request, want_advice: bool) -> dict:
 
 from .table import replay_context as table_replay_context  # noqa: E402
 from .table import build_view_v2 as table_build_view_v2  # noqa: E402
+from .table import quick_fold_preview  # noqa: E402
 
 
-def _validate_v2_hand(body: dict) -> None:
+@app.post("/api/table/quick-fold")
+def table_quick_fold_api(payload: dict):
+    if payload.get("protocol_version") != 2:
+        raise HTTPException(400, "protocol_version 必须为 2")
+    context = _context_of(payload)
+    _validate_v2_hand(payload, require_cards=bool(payload.get("ops")))
+    try:
+        result = quick_fold_preview(context, payload.get("hero_cards"), payload.get("ops", []))
+    except (TableError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    return {"hand_id": payload.get("hand_id"), **result}
+
+
+def _validate_v2_hand(body: dict, *, require_cards: bool = True) -> None:
     cards = body.get("hero_cards")
     ops = body.get("ops", [])
-    if not isinstance(cards, list) or len(cards) != 2 or any(not isinstance(c, str) for c in cards):
+    if require_cards and (not isinstance(cards, list) or len(cards) != 2 or any(not isinstance(c, str) for c in cards)):
         raise HTTPException(400, "hero_cards 须为两张牌的字符串数组")
     if not isinstance(ops, list) or len(ops) > 1000:
         raise HTTPException(400, "ops 须为数组且不超过 1000 步")

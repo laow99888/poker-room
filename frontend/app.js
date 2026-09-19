@@ -7,6 +7,7 @@ import {
   createSession, chipsFromBB, chipsToBBText,
   setHeroCards, pushOp, undoLastOp, replayHand, manualCloseHand,
   enterSettling, cancelSettlement,
+  closeQuickFold, useEstimatedBalances, calibrateStartingChips,
   buildSettlementDraft, editSettlementRow, confirmAllCurrentValues,
   validateSettlement, beginCommit, completeCommit,
   emptyNextHandDraft, applyRosterEdit, applyDraftPositions, setDraftBlinds,
@@ -63,6 +64,8 @@ const rt = {
   setup: { occupied: new Map(), heroSeatId: null, buttonSeatId: null, sbSeatId: null, bbSeatId: null },
   setupPreview: null,
   nextPositionsConfirmed: false,
+  quickFoldError: "",
+  quickFoldGuardUntil: 0,
   advancedBound: false,
 };
 
@@ -93,6 +96,9 @@ function resumeIfPossible() {
     if (window.matchMedia("(max-width: 767px)").matches) $("#deck-panel").open = false;
   } else {
     renderAll();
+    if (s.phase === "ready" && s.recentHands.at(-1)?.quickFold && window.matchMedia("(max-width: 767px)").matches) {
+      $("#deck-panel").open = false;
+    }
   }
 }
 
@@ -261,7 +267,10 @@ async function onConfirmTable() {
     rt.unit = session.displayUnit;
     renderAll();
   } catch (e) { setupError(`建桌失败：${e.message}`); }
-  finally { rt.committing = false; $("#tg-create").disabled = false; }
+  finally {
+    rt.committing = false; $("#tg-create").disabled = false;
+    if (rt.session) renderAll();
+  }
 }
 
 async function prepareContext(session, handId, handNumber) {
@@ -483,6 +492,7 @@ function onReplayHand() {
 }
 
 function onManualClose() {
+  if (rt.committing || rt.conflict) return;
   const reason = window.prompt("说明本手记录不完整的原因（将随本手保存）：");
   if (reason === null) return;
   try {
@@ -495,6 +505,43 @@ function onManualClose() {
   }
   persist();
   renderAll();
+}
+
+async function onQuickFold(review = false) {
+  if (rt.committing || rt.conflict || rt.coord.viewPending() || Date.now() < rt.quickFoldGuardUntil) return;
+  rt.committing = true;
+  rt.quickFoldError = "";
+  const source = rt.session, fingerprint = JSON.stringify(source);
+  rt.coord.resync(source);
+  rt.advice = null; rt.adviceState = "idle";
+  renderAll();
+  let failure = "";
+  try {
+    const response = await fetch("/api/table/quick-fold", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(viewPayload(source.currentHand.ops))});
+    const body = await response.json();
+    if (rt.conflict || rt.session !== source || JSON.stringify(source) !== fingerprint) {
+      throw new Error("本手已变化，未执行快捷弃牌");
+    }
+    if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
+    if (body.hand_id !== source.currentHand.handId) throw new Error("弃牌结果与本手不匹配");
+    const candidate = structuredClone(source);
+    closeQuickFold(candidate, body.rows);
+    await persistAtomic(candidate);
+    rt.session = candidate;
+    rt.coord.resync(candidate);
+    rt.view = null;
+    if (!review) await commitCurrentSettlement();
+  } catch (e) { failure = e.message; }
+  finally {
+    rt.committing = false;
+    rt.quickFoldError = failure;
+    renderAll();
+    if (failure && rt.session.phase === "settling") showSettleError(failure);
+    if (!failure && !review && rt.session.phase === "ready" && window.matchMedia("(max-width: 767px)").matches) {
+      $("#quick-fold")?.scrollIntoView({behavior: "instant", block: "nearest"});
+    }
+  }
 }
 
 function enterSettlePhase(view) {
@@ -532,6 +579,7 @@ function renderSettle() {
     const isHero = row.occupantId === s.heroOccupantId;
     const val = row.finalChips === null ? "" : String(row.finalChips);
     const srcTag = row.source === "pending" || row.finalChips === null ? '<span class="src-tag warn">待核对</span>'
+      : row.source === "estimated" ? '<span class="src-tag warn">估算</span>'
       : row.source === "manual" ? '<span class="src-tag">手工</span>'
       : '<span class="src-tag ok">可核对</span>';
     return `<tr data-seat="${row.seatId}">
@@ -544,7 +592,7 @@ function renderSettle() {
       <td>${row.finalChips === null ? "—" : chipsToBBText(row.finalChips, s.blindLevel.bb) + "BB"}</td>
     </tr>`;
   }).join("");
-  const deltaLine = v.delta === 0
+  const deltaLine = v.hasEstimates ? '<span class="src-tag warn">含估算余额，差额不计为真实盈亏</span>' : v.delta === 0
     ? `<span class="src-tag ok">总额守恒 ${fmtChips(v.finalSum)}</span>`
     : `<span class="src-tag warn">差额 ${v.delta > 0 ? "+" : ""}${fmtChips(v.delta)}（手前 ${fmtChips(v.startingSum)} → 填写 ${fmtChips(v.finalSum)}）</span>`;
   area.innerHTML = `
@@ -554,9 +602,11 @@ function renderSettle() {
       <tbody>${rows}</tbody></table></div>
     <div class="settle-tools">
       <button type="button" class="ghost-btn" data-action="confirm-current">确认当前填写值</button>
+      ${draft.rows.some(row => row.finalChips === null && row.occupantId !== s.heroOccupantId)
+        ? '<button type="button" class="ghost-btn" id="settle-estimated">未填对手沿用估算</button>' : ""}
       <span id="settle-totals">${deltaLine}</span>
     </div>
-    <div class="setup-row" id="settle-diff-row" ${v.delta === 0 ? "hidden" : ""}>
+    <div class="setup-row" id="settle-diff-row" ${v.delta === 0 || v.hasEstimates ? "hidden" : ""}>
       <input type="text" id="settle-reason" placeholder="差额原因（现场漏记/初始录错等）" value="${esc(draft.adjustmentReason || "")}">
       <label class="switch-line"><input type="checkbox" id="settle-accept" ${draft.differenceAccepted ? "checked" : ""}> 我确认该差额</label>
     </div>
@@ -583,8 +633,9 @@ function bindSettleEvents(area) {
     rt.session.nextHandDraft.positions = null;
     persist();
     const check = validateSettlement(rt.session, draft);
-    $("#settle-totals").textContent = draft.rows.some(r => r.finalChips === null) ? "有余额待核对" : `合计 ${fmtChips(check.finalSum)} · 差额 ${fmtChips(check.delta)}`;
-    $("#settle-diff-row").hidden = check.delta === 0;
+    $("#settle-totals").textContent = check.hasEstimates ? "含估算余额，差额不计为真实盈亏"
+      : draft.rows.some(r => r.finalChips === null) ? "有余额待核对" : `合计 ${fmtChips(check.finalSum)} · 差额 ${fmtChips(check.delta)}`;
+    $("#settle-diff-row").hidden = check.delta === 0 || check.hasEstimates;
     $("#settle-accept").checked = false;
     input.closest("tr").lastElementChild.textContent = value === null || !valid ? "待核对" : chipsToBBText(value, rt.session.blindLevel.bb) + " BB";
     input.closest("tr").querySelector(".src-tag").textContent = value === null || !valid ? "待核对" : "手工";
@@ -595,6 +646,10 @@ function bindSettleEvents(area) {
   }));
   area.querySelector('[data-action="confirm-current"]')?.addEventListener("click", () => {
     confirmAllCurrentValues(rt.session.settlementDraft); persist(); renderSettle();
+  });
+  area.querySelector('#settle-estimated')?.addEventListener("click", () => {
+    if (rt.committing || rt.conflict) return;
+    useEstimatedBalances(rt.session); persist(); renderAll();
   });
   area.querySelector("#settle-reason").addEventListener("input", e => {
     rt.session.settlementDraft.adjustmentReason = e.target.value; persist();
@@ -625,7 +680,8 @@ function updateCommitLabel() {
   try {
     const candidate = previewRoster(s, s.nextHandDraft?.rosterEdits || []);
     const ending = activeSeats(candidate).length < 2 || candidate.occupants[s.heroOccupantId]?.status !== "active";
-    $("#settle-commit").textContent = ending ? "确认余额，结束本桌" : "确认余额，进入下一手";
+    $("#settle-commit").textContent = ending ? "确认余额，结束本桌"
+      : s.settlementDraft.rows.some(row => row.source === "estimated") ? "按当前余额 / 估算进入下一手" : "确认余额，进入下一手";
   } catch { /* 成员错误由结算校验呈现。 */ }
 }
 
@@ -726,26 +782,40 @@ async function commitSettlement(area) {
   rt.committing = true;
   area.querySelector("#settle-commit").disabled = true;
   try {
-    const s = rt.session;
-    confirmAllCurrentValues(s.settlementDraft);
-    const tx = beginCommit(s);
-    const committed = completeCommit(s, tx, null);
-    if (committed.phase !== "ended") await prepareContext(committed);
-    assertCommitCurrent(rt.session, tx);
-    await persistAtomic(committed);
-    rt.session = committed;
-    rt.view = null; rt.advice = null; rt.error = "";
-    rt.heroPicks = []; rt.boardPicks = []; rt.gridMode = null;
-    rt.adviceState = "idle"; rt.nextPositionsConfirmed = false;
-    rt.coord.resync(committed);
-    $("#deck-panel").open = true;
+    await commitCurrentSettlement();
     renderAll();
   } catch (e) { showSettleError(`结算未完成：${e.message}`); }
   finally {
     rt.committing = false;
     if (rt.session.phase === "settling") updateCommitLabel();
+    else renderAll();
   }
   if (rt.session.phase !== "settling") syncLearningJobs();
+}
+
+async function commitCurrentSettlement() {
+  const s = rt.session;
+  const quickFold = !!s.currentHand.quickFold;
+  confirmAllCurrentValues(s.settlementDraft);
+  const tx = beginCommit(s);
+  const committed = completeCommit(s, tx, null);
+  if (committed.phase !== "ended") await prepareContext(committed);
+  assertCommitCurrent(rt.session, tx);
+  await persistAtomic(committed);
+  rt.session = committed;
+  rt.view = null; rt.advice = null; rt.error = ""; rt.quickFoldError = "";
+  rt.heroPicks = []; rt.boardPicks = []; rt.gridMode = null;
+  rt.adviceState = "idle"; rt.nextPositionsConfirmed = false;
+  rt.coord.resync(committed);
+  $("#deck-panel").open = !(quickFold && window.matchMedia("(max-width: 767px)").matches);
+  if (quickFold) {
+    // A second tap landing on the new hand must not skip that hand too.
+    rt.quickFoldGuardUntil = Date.now() + 600;
+    setTimeout(() => {
+      if (Date.now() < rt.quickFoldGuardUntil || rt.committing || rt.conflict || rt.coord.viewPending()) return;
+      document.querySelectorAll('#quick-fold, #quick-fold-review').forEach(button => { button.disabled = false; });
+    }, 650);
+  }
 }
 
 
@@ -807,6 +877,8 @@ function renderAll() {
   renderNextSettings();
   renderIcm();
   renderDeck();
+  $("#layout").inert = rt.committing;
+  $("#bar-main-slot").inert = rt.committing;
 }
 
 function renderWorkflow() {
@@ -837,6 +909,24 @@ function renderSessionSettings() {
     ["我的手前筹码", `${fmtChips(s.occupants[s.heroOccupantId]?.confirmedChips ?? 0)} 筹码`],
   ];
   $("#session-settings").innerHTML = rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${esc(value)}</dd></div>`).join("");
+  const calibration = $("#chips-calibration");
+  calibration.hidden = s.phase !== "ready" || s.currentHand?.heroCards.some(Boolean);
+  if (!calibration.hidden) {
+    const body = $("#chips-calibration-body");
+    body.innerHTML = s.currentHand.context.participants.map(p => `<label class="chip-calibration-row">${p.seat_id}号座${p.occupant_id === s.heroOccupantId ? " · 你" : ""}
+      <input type="number" min="1" inputmode="numeric" data-chip-seat="${p.seat_id}" value="${p.starting_chips}" aria-label="${p.seat_id}号座手前筹码">
+      <button type="button" class="ghost-btn" data-calibrate="${p.seat_id}">确认</button></label>`).join("")
+      + '<p id="calibration-error" class="form-error" role="alert"></p>';
+    body.querySelectorAll('[data-calibrate]').forEach(button => button.onclick = () => {
+      if (rt.committing || rt.conflict) return;
+      try {
+        const sid = Number(button.dataset.calibrate), candidate = structuredClone(s);
+        calibrateStartingChips(candidate, sid, Number(body.querySelector(`[data-chip-seat="${sid}"]`).value));
+        if (!persist(candidate)) throw new Error("保存失败，筹码未更新");
+        rt.session = candidate; rt.coord.resync(candidate); rt.view = null; renderAll();
+      } catch (e) { $("#calibration-error").textContent = e.message; }
+    });
+  }
 }
 
 function renderSessionBar() {
@@ -844,7 +934,7 @@ function renderSessionBar() {
   const seat = heroSeatOf(s);
   const roleLabel = seat ? (rolesForSeat(s, seat).join("/") || rangePositionFor(s, seat) || "—") : "—";
   const occ = s.occupants[s.heroOccupantId];
-  const phaseText = { ready: "待选底牌", playing: "进行中", settling: "待核对筹码", ended: "本桌已结束" }[s.phase] || "";
+  const phaseText = { ready: "待录入", playing: "进行中", settling: "待核对筹码", ended: "本桌已结束" }[s.phase] || "";
   $("#session-status").innerHTML = s.phase === "ended"
     ? `本桌已结束 · 共 ${s.handNumber} 手 · 你最终 ${fmtChips(occ?.confirmedChips ?? 0)} 筹码`
     : `本桌第 ${s.handNumber} 手 · ${phaseText} · 你：${seat ?? "—"}号座/${esc(roleLabel)} · ` +
@@ -890,7 +980,7 @@ function renderTableCaption() {
   const roleLabel = seat ? (rolesForSeat(s, seat).join("/") || rangePositionFor(s, seat) || "—") : "—";
   const stage = s.phase === "settling" ? "待核对筹码"
     : s.phase === "playing" && rt.view ? (STREET_LABEL[rt.view.street] || "")
-    : s.phase === "ready" ? "待选底牌" : "";
+    : s.phase === "ready" ? "待录入" : "";
   $("#caption-hand").textContent = `本桌第 ${s.currentHand.handNumber} 手 · ${stage}`;
   $("#caption-seat").textContent =
     `你：${seat ?? "—"}号座 / ${roleLabel} · 盲注${s.blindLevel.sb}/${s.blindLevel.bb} · 每人前注${s.blindLevel.anteEach}`;
@@ -934,7 +1024,7 @@ function renderSeats() {
     html.push(`<div class="seat${isHero ? " hero" : ""}${acting ? " acting" : ""}${folded ? " folded" : ""}" style="left:${xy.x}%;top:${xy.y}%" data-seat="${seat.id}">
       <div class="pos-tag">${seat.id}号座${isHero ? " · 你" : ""}</div>${roleTag}
       <div class="stack">${stack === null ? "待核对" : rt.unit === "chips" ? fmtChips(stack) : chipsToBBText(stack, s.blindLevel.bb) + " BB"}
-        <span class="bb-tag">${stack === null ? "" : rt.unit === "chips" ? chipsToBBText(stack, s.blindLevel.bb) + " BB" : fmtChips(stack)}</span>${occ.chipsEstimated && !row ? '<span class="estimated-label">估算</span>' : ""}</div>
+        <span class="bb-tag">${stack === null ? "" : rt.unit === "chips" ? chipsToBBText(stack, s.blindLevel.bb) + " BB" : fmtChips(stack)}</span>${row ? row.source === "estimated" ? '<span class="estimated-label">估算</span>' : "" : occ.chipsEstimated ? '<span class="estimated-label">估算</span>' : ""}</div>
       ${allIn ? '<span class="badge badge-allin">全下</span>' : ""}
       ${folded ? '<span class="badge badge-fold">弃牌</span>' : ""}
       ${acting ? '<span class="badge acting-tag">待录入动作</span>' : ""}
@@ -1075,6 +1165,23 @@ function onDeckPick(card) {
 function setStatus(msg) { $("#status-line").textContent = msg; }
 
 function renderConsole() {
+  renderConsoleContent();
+  const s = rt.session, hand = s?.currentHand;
+  if (!hand || !["ready", "playing"].includes(s.phase)) return;
+  const hero = rt.view?.seats.find(seat => seat.seat_id === heroSeatOf(s));
+  if (hand.ops.length && !hero?.folded && (rt.view?.actor_seat_id !== heroSeatOf(s) || !rt.view?.can_fold)) return;
+  const area = $("#action-area"), controls = document.createElement("div");
+  controls.className = "quick-fold-actions";
+  const disabled = rt.committing || rt.conflict || rt.coord.viewPending() || Date.now() < rt.quickFoldGuardUntil;
+  controls.innerHTML = `<button type="button" class="primary-btn" id="quick-fold" title="确认现场已进入下一手" ${disabled ? "disabled" : ""}>${rt.committing ? "正在保存本手…" : hero?.folded ? "按估算进入下一手" : "本手弃牌并下一手"}</button>
+    <button type="button" class="ghost-btn" id="quick-fold-review" ${disabled ? "disabled" : ""}>${hero?.folded ? "校准筹码 / 人员" : "弃牌后校准筹码 / 人员"}</button>
+    <p class="form-error" role="alert" ${rt.quickFoldError ? "" : "hidden"}>${esc(rt.quickFoldError)}</p>`;
+  controls.querySelector('#quick-fold').onclick = () => onQuickFold();
+  controls.querySelector('#quick-fold-review').onclick = () => onQuickFold(true);
+  area.prepend(controls);
+}
+
+function renderConsoleContent() {
   renderWorkflow();
   const s = rt.session;
   if (!s) return;
@@ -1091,7 +1198,8 @@ function renderConsole() {
     return;
   }
   if (s.phase === "settling") {
-    setStatus("请核对全桌手后实际余额，确认后进入下一手。");
+    setStatus(s.settlementDraft.rows.some(row => row.source === "estimated")
+      ? "筹码可选校准，确认后进入下一手。" : "请核对全桌手后实际余额，确认后进入下一手。");
     area.innerHTML = "";
     return;
   }
@@ -1146,6 +1254,9 @@ function renderActionButtons(isHero) {
   const toCall = view.to_call || 0;
   let html = seat == null ? "" : (view.can_fold ? btn(`fold:${seat}`, "弃牌") : "")
     + btn(`call:${seat}`, toCall > 0 ? `跟注 ${actionAmount(toCall)}` : "过牌");
+  if (isHero && s.currentHand.context.participants.some(p => p.occupant_id !== s.heroOccupantId && s.occupants[p.occupant_id]?.chipsEstimated)) {
+    html = '<p class="footnote">对手筹码含估算，大额下注或全下前请核对。</p>' + html;
+  }
   const minTo = view.min_raise_to;
   const maxTo = view.max_raise_to;
   if (minTo != null && maxTo != null && minTo <= maxTo) {
@@ -1326,7 +1437,7 @@ function renderHistory() {
   if (!s) { body.innerHTML = ""; return; }
   $("#history-tip").textContent = `最近 ${s.recentHands.length} 手（窗口 100）`;
   body.innerHTML = s.recentHands.slice().reverse().map((h) =>
-    `<p class="footnote">第 ${h.handNumber} 手 · ${h.recordQuality === "manual_close" ? "手工结束" : "完整"} ·
+    `<p class="footnote">第 ${h.handNumber} 手 · ${h.quickFold ? "弃牌快记" : h.recordQuality === "manual_close" ? "手工结束" : "完整"}${h.estimatedOccupantIds?.length ? " · 含估算余额" : ""} ·
       ${new Date(h.settledAt).toLocaleString("zh-CN")}${h.adjustmentReason ? ` · 差额原因：${esc(h.adjustmentReason)}` : ""}</p>`).join("")
     || '<p class="footnote">尚无已完成的手。</p>';
 }

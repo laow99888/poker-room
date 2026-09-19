@@ -1,5 +1,7 @@
 # 浏览器验收
 
+快捷弃牌专项：`node tests/browser/quick-fold.e2e.mjs`，沿用下述隔离服务与Puppeteer配置。覆盖6/8/9座在桌面及手机的一整圈弃牌、单人校准、估算延续、未选牌弃牌、跟注后弃牌、已弃牌续手、防连点、网络/保存失败、刷新及多标签冲突。`POKER_QUICK_OUTPUT` 可指定输出，默认 `docs/screenshots/quick-fold-2026-09-19/quick/`。本专项需单独运行。
+
 使用独立浏览器和隔离统计服务，不连接日常浏览器，不写用户的 opponents.json。
 
 1. 从项目根目录运行 `python tests/browser/serve.py`，默认监听 127.0.0.1:8142。

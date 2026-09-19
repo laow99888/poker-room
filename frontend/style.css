@@ -559,6 +559,11 @@ button:focus-visible, summary:focus-visible { outline: 3px solid #93e0df; outlin
 .raise-box .tip { font-size: 12px; color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
 .raise-box .form-error { margin: 0; }
 .raise-box .form-error:empty { display: none; }
+.quick-fold-actions { display: grid; gap: 8px; margin-bottom: 12px; }
+.quick-fold-actions button { min-height: 44px; white-space: normal; }
+.chip-calibration-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; margin: 10px 0; font-size: 13px; }
+.chip-calibration-row input { grid-column: 1; min-width: 0; width: 100%; }
+.chip-calibration-row button { grid-column: 2; min-height: 44px; }
 #advice .big { font-size: 36px; }
 #advice .big small { font-size: 12px; }
 #advice .rec-box, #advice .cfr-box { border: 0; border-radius: 0; border-top: 1px solid var(--line); background: transparent; padding: 12px 0; }

@@ -471,6 +471,40 @@ def build_view_v2(state, context: dict, plan: dict, dealt: dict) -> dict:
     return view
 
 
+def quick_fold_preview(context: dict, hero_cards, ops) -> dict:
+    """Record only a known hero fold; never infer opponents' unobserved results."""
+    from . import table_context
+
+    if ops:
+        state, plan, dealt = replay_context(context, hero_cards, ops)
+        hero = plan["seat_to_index"][plan["hero_seat_id"]]
+        if hero not in _folded_indices(state):
+            if not state.status or state.actor_index != hero or not state.can_fold():
+                raise TableError("当前不能记录你的弃牌，请先核对行动或实际余额")
+            # Avoid automatic showdown/payout side effects: only the hero's current
+            # remaining stack is known here; the unrecorded rest of the hand is not.
+            if state.stacks[hero] <= 0:
+                raise TableError("你已全下，不能按弃牌进入下一手")
+            rows = settlement_preview(state, plan, dealt)["rows"]
+            for row in rows:
+                if row["seat_id"] == plan["hero_seat_id"]:
+                    row.update(suggested_chips=int(state.stacks[hero]), source="verified", reason="hero_fold")
+        else:
+            rows = settlement_preview(state, plan, dealt)["rows"]
+    else:
+        plan = table_context.engine_plan(context)
+        state = _create_engine_state(plan["player_count"], *plan["raw_blinds"],
+                                     plan["antes"], plan["stacks"], plan["min_bet"])
+        hero = plan["seat_to_index"][plan["hero_seat_id"]]
+        if state.stacks[hero] <= 0:
+            raise TableError("你的筹码已全部用于盲注或前注，不能按弃牌结束，请核对实际结果")
+        rows = [{"seat_id": sid, "suggested_chips": int(state.stacks[i]) if i == hero else None,
+                 "source": "verified" if i == hero else "unknown",
+                 "reason": "hero_fold" if i == hero else "incomplete_record"}
+                for i, sid in enumerate(plan["index_to_seat"])]
+    return {"rows": rows}
+
+
 def _folded_indices(state) -> set:
     """从操作日志取弃牌者引擎索引（状态位在结算后会被清除）。"""
     return {op.player_index for op in state.operations

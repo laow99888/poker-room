@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>大魔丸 · 锦标赛逐手记录与局面推演</title>
-<link rel="stylesheet" href="style.css?v=20260923pos2">
+<link rel="stylesheet" href="style.css?v=20260923qf">
 </head>
 <body>
 <div class="felt-vignette" aria-hidden="true"></div>
@@ -70,6 +70,7 @@
     <div class="panel" id="session-settings-panel" aria-label="本手参数" hidden>
       <div class="group-title">本手参数</div>
       <dl id="session-settings"></dl>
+      <details id="chips-calibration" hidden><summary>校准手前筹码</summary><div id="chips-calibration-body"></div></details>
     </div>
 
     <details class="panel" id="nextround-panel" hidden aria-label="下一手设置">
@@ -94,8 +95,8 @@
       <summary class="group-title">玩法</summary>
       <div class="footnote">
         <p>逐手录入牌桌上的实际动作；系统按已录入信息做位置感知的局面推演（范围、胜率、赔率均为基于假设范围的估算）。</p>
-        <p>对手底牌未录入时不会推断真实输赢：未知摊牌的手，请在结算页核对实际筹码后确认，模拟收益不会计入下一手。</p>
-        <p>每手结束可修改全桌最终实际余额；确认后自动轮转庄位并进入下一手。所有金额可同时以大盲（BB）与筹码显示。</p>
+        <p>对手底牌未录入时不会推断真实输赢：未知对手余额可沿用估算，模拟收益不会计入下一手。自己的摊牌结果未知时仍需填写实际余额。</p>
+        <p>弃牌可直接记录并进入下一手；盲注、前注与已录入的投入自动计入自己的余额。其他筹码可选校准，估算余额不作为真实盈亏。</p>
         <p>位置：BTN 庄位，SB 小盲，BB 大盲，UTG 枪口位，UTG+1 / UTG+2 枪口后第1 / 第2位，MP 中位，HJ 劫位，CO 关煞位。座位编号不变，位置随庄位轮转；单挑时庄位兼小盲，显示 BTN/SB。</p>
       </div>
     </details>
@@ -163,6 +164,6 @@
 
 <div id="modal-root"></div>
 
-<script type="module" src="app.js?v=20260923pos2"></script>
+<script type="module" src="app.js?v=20260923qf"></script>
 </body>
 </html>

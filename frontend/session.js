@@ -401,6 +401,7 @@ export function replayHand(session) {
   hand.heroCards = [null, null];
   hand.recordQuality = "complete";
   hand.manualCloseReason = null;
+  delete hand.quickFold;
   session.settlementDraft = null;
   session.phase = "ready";
   return bumpRevision(session);
@@ -432,6 +433,7 @@ export function enterSettling(session, settlementPreview) {
 export function cancelSettlement(session) {
   requirePhase(session, ["settling"]);
   session.settlementDraft = null;
+  delete session.currentHand.quickFold;
   session.phase = session.currentHand.ops.length ? "playing" : "ready";
   return bumpRevision(session);
 }
@@ -451,7 +453,8 @@ export function buildSettlementDraft(session, previewRows) {
   const rows = [];
   for (const p of hand.context.participants) {
     const pre = bySeat.get(p.seat_id);
-    const source = pre?.source === "verified" ? "engine_verified" : "pending";
+    const source = pre?.source === "verified"
+      ? (session.occupants[p.occupant_id]?.chipsEstimated ? "estimated" : "engine_verified") : "pending";
     rows.push({
       seatId: p.seat_id,
       occupantId: p.occupant_id,
@@ -467,6 +470,45 @@ export function buildSettlementDraft(session, previewRows) {
     adjustmentReason: null,
     differenceAccepted: false,
   };
+}
+
+export function useEstimatedBalances(session) {
+  requirePhase(session, ["settling"]);
+  for (const row of session.settlementDraft.rows) {
+    if (row.finalChips !== null || row.occupantId === session.heroOccupantId) continue;
+    const p = session.currentHand.context.participants.find(p => p.occupant_id === row.occupantId);
+    row.finalChips = p.starting_chips;
+    row.source = "estimated";
+    row.confirmed = false;
+  }
+}
+
+export function closeQuickFold(session, previewRows) {
+  requirePhase(session, ["ready", "playing"]);
+  const hero = previewRows.find(row => row.seat_id === heroSeatOf(session));
+  if (hero?.source !== "verified" || !Number.isSafeInteger(hero.suggested_chips) || hero.suggested_chips <= 0) {
+    throw new DomainError("unknown_hero", "无法确定弃牌后的筹码，请核对实际结果");
+  }
+  manualCloseHand(session, "自己弃牌，后续未完整记录");
+  session.currentHand.quickFold = true;
+  session.settlementDraft = buildSettlementDraft(session, previewRows);
+  useEstimatedBalances(session);
+}
+
+export function calibrateStartingChips(session, seatId, chips) {
+  requirePhase(session, ["ready"]);
+  assertIntChips(chips, "手前筹码");
+  if (!chips || session.currentHand.ops.length || session.currentHand.heroCards.some(Boolean)) {
+    throw new DomainError("calibration_unavailable", "请在选牌前校准正数筹码；淘汰和人员变化在手间处理");
+  }
+  const p = session.currentHand.context.participants.find(p => p.seat_id === seatId);
+  if (!p) throw new DomainError("bad_seat", "该座位不在本手");
+  assertIntChips(session.currentHand.context.participants.reduce((sum, entry) => sum +
+    (entry === p ? chips : entry.starting_chips), 0), "全桌筹码");
+  p.starting_chips = chips;
+  session.occupants[p.occupant_id].confirmedChips = chips;
+  session.occupants[p.occupant_id].chipsEstimated = false;
+  bumpRevision(session);
 }
 
 export function editSettlementRow(draft, seatId, finalChips, source = "manual") {
@@ -521,13 +563,15 @@ export function validateSettlement(session, draft) {
   const startingSum = participants.reduce((a, p) => a + p.starting_chips, 0);
   if (sum > MAX_SAFE) errors.push("全桌合计超出安全整数");
   const delta = sum - startingSum;
-  if (delta !== 0) {
+  const hasEstimates = draft.rows.some(row => row.source === "estimated");
+  if (draft.rows.some(row => row.source === "estimated" && row.finalChips === 0)) errors.push("估算余额不能用于确认淘汰，请填写实际余额");
+  if (delta !== 0 && !hasEstimates) {
     if (!draft.adjustmentReason || !String(draft.adjustmentReason).trim()) {
       errors.push(`差额 ${delta > 0 ? "+" : ""}${delta} 需要填写原因`);
     }
     if (!draft.differenceAccepted) errors.push(`差额 ${delta > 0 ? "+" : ""}${delta} 需要显式确认`);
   }
-  return { ok: errors.length === 0, delta, errors, startingSum, finalSum: sum };
+  return { ok: errors.length === 0, delta, errors, startingSum, finalSum: sum, hasEstimates };
 }
 
 /* ---------------------------------------------------- M04 成员操作（手间） */
@@ -597,7 +641,7 @@ export function previewRoster(session, edits = []) {
     const occ = next.occupants[row.occupantId];
     if (!occ || row.finalChips === null) continue;
     occ.confirmedChips = row.finalChips;
-    occ.chipsEstimated = false;
+    occ.chipsEstimated = row.source === "estimated";
     if (row.finalChips === 0) {
       occ.status = "eliminated";
       const seat = next.seats.find(s => s.occupantId === occ.id);
@@ -803,13 +847,16 @@ export function completeCommit(session, tx, prepared) {
     finalChipsByOccupant: Object.fromEntries(
       tx.settlement.rows.map((r) => [r.occupantId, r.finalChips])),
     recordQuality: hand.recordQuality,
+    quickFold: !!hand.quickFold,
+    estimatedOccupantIds: tx.settlement.rows.filter(r => r.source === "estimated").map(r => r.occupantId),
     adjustmentReason: tx.settlement.adjustmentReason,
     positionSource: next.positions.source,
     settledAt: new Date().toISOString(),
   };
   // C-学习/A-04：开启学习且牌谱完整（真实摊牌走完）才创建记录任务；
   // manual_close 牌谱不完整，不能接续对手画像（R03）。
-  if (hand.context.learning_enabled && hand.recordQuality === "complete") {
+  if (hand.context.learning_enabled && hand.recordQuality === "complete"
+      && !tx.settlement.rows.some(r => r.source === "estimated")) {
     next.learningJobs ??= {};
     next.learningJobs[hand.handId] = {
       payload: {
