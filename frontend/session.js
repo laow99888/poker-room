@@ -700,9 +700,16 @@ function previewPositionsOf(session) {
   // 候选 SB：旧 BB 座位上的原玩家仍在则优先；否则允许空小盲
   const oldBbOcc = activeOccupantAt(session, oldBbSeat);
   const candSb = oldBbOcc && seated.includes(oldBbSeat) ? oldBbSeat : null;
-  // 候选 BTN：参考旧 SB 座位（仍在且不与 BB 同座），否则 BB 顺时针下一位
-  const oldSbStillIn = oldSbSeat != null && seated.includes(oldSbSeat);
-  const candBtn = oldSbStillIn && oldSbSeat !== candBb ? oldSbSeat : nextOf(candBb);
+  // 保留合法的旧 SB（可以是空庄位）；无旧 SB 时参考旧 BTN。
+  // 人员变动打断了原顺序时，从首个盲位逆向找庄位，不能跳到 BB 后面。
+  const firstBlind = candSb ?? candBb;
+  let candBtn = oldSbSeat ?? session.positions.buttonSeatId;
+  if (nextOf(candBtn) !== firstBlind) {
+    for (let step = 1; step <= n; step++) {
+      const sid = ((firstBlind - 1 - step + n) % n) + 1;
+      if (seated.includes(sid)) { candBtn = sid; break; }
+    }
+  }
   return {
     buttonSeatId: candBtn,
     smallBlindSeatId: candSb,

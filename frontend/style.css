@@ -577,7 +577,7 @@ input[type="checkbox"] { accent-color: var(--gold); }
 button, input, select, summary { touch-action: manipulation; }
 .setup-row { gap: 12px; }
 .setup-row label { flex-wrap: wrap; }
-#table-oval { height: 440px; }
+#table-oval { height: 480px; }
 .seat { width: 104px; max-width: 104px; min-width: 0; min-height: 74px; border-radius: 6px; padding: 6px; }
 .seat .pos-tag { white-space: normal; }
 .seat-position { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 2px 5px; margin: 2px 0; font-size: 11px; line-height: 1.25; color: var(--gold); }
@@ -619,8 +619,10 @@ button, input, select, summary { touch-action: manipulation; }
   .seat-position { display: block; font-size: 10px; line-height: 12px; margin: 0; }
   .position-name { display: none; }
   .badge.acting-tag { font-size: 10px; padding: 1px 2px; }
-  #table-center { width: min(174px, calc(100% - 172px)); top: 49%; }
-  #board-slots .slot { height: 46px; font-size: 18px; }
+  /* 六座斜边座位占到桌宽的 18% + 半个座位宽，桌心额外保留 4px 间距。 */
+  #table-center { width: min(174px, calc(64% - 76px)); top: 49%; }
+  #board-slots { gap: 3px; }
+  #board-slots .slot { height: 46px; padding: 2px; font-size: 18px; }
   #board-slots .slot .r, #board-slots .slot .s { font-size: 18px; }
   #card-grid { grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: 6px; overflow: visible; }
   .grid-card { min-width: 44px; width: 100%; height: 44px; font-size: 16px; padding: 2px 0; }

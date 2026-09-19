@@ -1,0 +1,75 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "A04 automatic recording after commit uses original payload and user ID",
+      "passed": true
+    },
+    {
+      "name": "C02 C03 C04 C18 precision, rounding consent, invalid fields and per-seat chips",
+      "passed": true
+    },
+    {
+      "name": "B01 S02 S05 C12 C13 L01 L03 A01 three hands, double submit, slow prepare and repeated reload",
+      "passed": true
+    },
+    {
+      "name": "S04 U03 cancel completed settlement and correct last action without changing hand or balances",
+      "passed": true
+    },
+    {
+      "name": "F3 C06 C07 C08 S13 S15 U06 U12 unknown showdown, rejected board and hero folded",
+      "passed": true
+    },
+    {
+      "name": "B03 S07 S08 U03 U07 U09 delayed actual JSON, replay, advice isolation and equal-length branch",
+      "passed": true
+    },
+    {
+      "name": "U08 S12 L04 U10 duplicate actions and unsaved action refresh recovery",
+      "passed": true
+    },
+    {
+      "name": "S14 A07 late record failure, current hand operable, disabling pauses old jobs",
+      "passed": true
+    },
+    {
+      "name": "B02 P04 P06 P07 A12 three to two, actual blinds and postflop actor, ICM rescope",
+      "passed": true
+    },
+    {
+      "name": "L05 L06 L07 corrupt preservation and exact legacy prefill with learning off",
+      "passed": true
+    },
+    {
+      "name": "M07 C10 P15 short all-in stays seated; actual balance correction requires reason and consent",
+      "passed": true
+    },
+    {
+      "name": "M04 C11 A06 A13 player replacement separates transfer chips from hand result and reconfirms ICM",
+      "passed": true
+    },
+    {
+      "name": "S10 S11 ICM 600 to 1000 during delayed restore remains a next-hand setting",
+      "passed": true
+    },
+    {
+      "name": "U06 stale advice during board selection preserves cards, focus, scroll and cancel",
+      "passed": true
+    },
+    {
+      "name": "U10 persistence and advice statuses remain independent in both directions",
+      "passed": true
+    },
+    {
+      "name": "B04 U01 U02 U05 U11 layout and input focus: 45 viewport/state/roster combinations",
+      "passed": true,
+      "physicalKeyboardOnly": true
+    },
+    {
+      "name": "L10 full Chromium restart preserves session and identity",
+      "passed": true,
+      "profile": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\poker-acceptance-profile-uKn9uK"
+    }
+  ]
+}

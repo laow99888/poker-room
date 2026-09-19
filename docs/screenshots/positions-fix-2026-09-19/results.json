@@ -1,0 +1,2046 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "departures-6-1440 four consecutive commits return to automatic rotation",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-d66f4881-1f09-424d-a9e6-26616e6b6db5",
+            "hand_number": 1,
+            "context": {
+              "session_id": "s-47258c38-9417-4f7f-91b9-3ff37e1e5807",
+              "capacity": 6,
+              "hero_occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-2de0d515-adfd-4de2-9073-d325fd79df67",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-cbdc9f88-f28c-40e4-a59b-4f5471b6b4c1",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-e0f2166c-7c43-4b05-95d2-c38490b2ad35",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-50f54d4d-c7ab-4486-b940-f86852fad502",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-1fd62149-3c51-4113-b9aa-8d56bc50be2a",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 4,
+              "small_blind_seat_id": 5,
+              "big_blind_seat_id": 6,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-0375a4d8-5c06-4b36-b958-f43684c42c6f",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-47258c38-9417-4f7f-91b9-3ff37e1e5807",
+              "capacity": 6,
+              "hero_occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-2de0d515-adfd-4de2-9073-d325fd79df67",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-cbdc9f88-f28c-40e4-a59b-4f5471b6b4c1",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-e0f2166c-7c43-4b05-95d2-c38490b2ad35",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 5,
+              "small_blind_seat_id": null,
+              "big_blind_seat_id": 1,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-2deb5208-1b35-4ef7-b0b5-8f95ad7269f1",
+            "hand_number": 3,
+            "context": {
+              "session_id": "s-47258c38-9417-4f7f-91b9-3ff37e1e5807",
+              "capacity": 6,
+              "hero_occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-2de0d515-adfd-4de2-9073-d325fd79df67",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-cbdc9f88-f28c-40e4-a59b-4f5471b6b4c1",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-e0f2166c-7c43-4b05-95d2-c38490b2ad35",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 5,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-c3e4b392-511d-4583-a7a5-1b388a5bcfcd",
+            "hand_number": 4,
+            "context": {
+              "session_id": "s-47258c38-9417-4f7f-91b9-3ff37e1e5807",
+              "capacity": 6,
+              "hero_occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-2de0d515-adfd-4de2-9073-d325fd79df67",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-cbdc9f88-f28c-40e4-a59b-4f5471b6b4c1",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-e0f2166c-7c43-4b05-95d2-c38490b2ad35",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 1,
+              "small_blind_seat_id": 2,
+              "big_blind_seat_id": 3,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-6b83760f-7ba5-4a15-bff9-5c280096e4e8",
+            "hand_number": 5,
+            "context": {
+              "session_id": "s-47258c38-9417-4f7f-91b9-3ff37e1e5807",
+              "capacity": 6,
+              "hero_occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-bb0830a9-a10e-42e8-aff8-87d21f5636d9",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-2de0d515-adfd-4de2-9073-d325fd79df67",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-cbdc9f88-f28c-40e4-a59b-4f5471b6b4c1",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-e0f2166c-7c43-4b05-95d2-c38490b2ad35",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 2,
+              "small_blind_seat_id": 3,
+              "big_blind_seat_id": 4,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "departures-8-1440 four consecutive commits return to automatic rotation",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-91b716b9-75d0-4b10-93f5-fc5751ed806f",
+            "hand_number": 1,
+            "context": {
+              "session_id": "s-8a11f883-f017-4102-a94c-93c174e3ea58",
+              "capacity": 8,
+              "hero_occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-825bfaa9-56ee-4a65-903e-5d8a63705baa",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-3ebeaa74-4f7f-424e-9176-63db08aa84e5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-b7c965d2-b8f3-491b-8448-bc79b62d403c",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-bf867862-55fa-4bed-969b-e0ef8081ca00",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-f86b97d3-9a43-48cb-aaf6-bfa3b22bb557",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-75855d2d-84b0-411b-b016-80a188ec4d91",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 8,
+                  "occupant_id": "p-7f8b4405-3c3f-4b6d-9ca1-a7904e20c375",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 6,
+              "small_blind_seat_id": 7,
+              "big_blind_seat_id": 8,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-a981d006-64c9-4ad1-b752-aa309326479b",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-8a11f883-f017-4102-a94c-93c174e3ea58",
+              "capacity": 8,
+              "hero_occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-825bfaa9-56ee-4a65-903e-5d8a63705baa",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-3ebeaa74-4f7f-424e-9176-63db08aa84e5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-b7c965d2-b8f3-491b-8448-bc79b62d403c",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-bf867862-55fa-4bed-969b-e0ef8081ca00",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-f86b97d3-9a43-48cb-aaf6-bfa3b22bb557",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 7,
+              "small_blind_seat_id": null,
+              "big_blind_seat_id": 1,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-bb30f569-8a6c-432b-9381-134cdad2ffb4",
+            "hand_number": 3,
+            "context": {
+              "session_id": "s-8a11f883-f017-4102-a94c-93c174e3ea58",
+              "capacity": 8,
+              "hero_occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-825bfaa9-56ee-4a65-903e-5d8a63705baa",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-3ebeaa74-4f7f-424e-9176-63db08aa84e5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-b7c965d2-b8f3-491b-8448-bc79b62d403c",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-bf867862-55fa-4bed-969b-e0ef8081ca00",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-f86b97d3-9a43-48cb-aaf6-bfa3b22bb557",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 7,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-3c5b0431-f414-4835-b766-f4b2f70b752e",
+            "hand_number": 4,
+            "context": {
+              "session_id": "s-8a11f883-f017-4102-a94c-93c174e3ea58",
+              "capacity": 8,
+              "hero_occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-825bfaa9-56ee-4a65-903e-5d8a63705baa",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-3ebeaa74-4f7f-424e-9176-63db08aa84e5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-b7c965d2-b8f3-491b-8448-bc79b62d403c",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-bf867862-55fa-4bed-969b-e0ef8081ca00",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-f86b97d3-9a43-48cb-aaf6-bfa3b22bb557",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 1,
+              "small_blind_seat_id": 2,
+              "big_blind_seat_id": 3,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-c313bab5-1246-45ee-ac11-30e9b614c9e4",
+            "hand_number": 5,
+            "context": {
+              "session_id": "s-8a11f883-f017-4102-a94c-93c174e3ea58",
+              "capacity": 8,
+              "hero_occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-71c27d40-8b36-4351-804a-bcd2d4d4c7fd",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-825bfaa9-56ee-4a65-903e-5d8a63705baa",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-3ebeaa74-4f7f-424e-9176-63db08aa84e5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-b7c965d2-b8f3-491b-8448-bc79b62d403c",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-bf867862-55fa-4bed-969b-e0ef8081ca00",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-f86b97d3-9a43-48cb-aaf6-bfa3b22bb557",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 2,
+              "small_blind_seat_id": 3,
+              "big_blind_seat_id": 4,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "departures-9-1440 four consecutive commits return to automatic rotation",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-55026ad2-fae5-4c2a-989e-c8d3b32e3d57",
+            "hand_number": 1,
+            "context": {
+              "session_id": "s-afae0698-ed4e-4078-ba1e-afc5d95d3a28",
+              "capacity": 9,
+              "hero_occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-71a506bd-9358-4cfb-a08d-528015ad81b0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-a4c6feae-dce6-4645-bb7b-e63b34a4dc0b",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-8b85644e-9a5c-4b16-98bb-0d121f8fc58a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-320ca8f2-5f6b-4d09-85f5-b4a39c8b6344",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-eafb7115-a614-4f9e-beec-4636c6fb5f68",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-6d61c73f-950c-4960-a29b-6b7b40018c65",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 8,
+                  "occupant_id": "p-99e1fc9b-51d3-45c7-b055-dbb061c99cb9",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 9,
+                  "occupant_id": "p-34553eaf-0dec-4331-b2fa-bf850e1b6a8f",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 7,
+              "small_blind_seat_id": 8,
+              "big_blind_seat_id": 9,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-d5189121-0ac2-47fc-95d2-10fac2c6f6d4",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-afae0698-ed4e-4078-ba1e-afc5d95d3a28",
+              "capacity": 9,
+              "hero_occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-71a506bd-9358-4cfb-a08d-528015ad81b0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-a4c6feae-dce6-4645-bb7b-e63b34a4dc0b",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-8b85644e-9a5c-4b16-98bb-0d121f8fc58a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-320ca8f2-5f6b-4d09-85f5-b4a39c8b6344",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-eafb7115-a614-4f9e-beec-4636c6fb5f68",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-6d61c73f-950c-4960-a29b-6b7b40018c65",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 8,
+              "small_blind_seat_id": null,
+              "big_blind_seat_id": 1,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-4a235d56-938a-4d46-a48e-c5060f0d9718",
+            "hand_number": 3,
+            "context": {
+              "session_id": "s-afae0698-ed4e-4078-ba1e-afc5d95d3a28",
+              "capacity": 9,
+              "hero_occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-71a506bd-9358-4cfb-a08d-528015ad81b0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-a4c6feae-dce6-4645-bb7b-e63b34a4dc0b",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-8b85644e-9a5c-4b16-98bb-0d121f8fc58a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-320ca8f2-5f6b-4d09-85f5-b4a39c8b6344",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-eafb7115-a614-4f9e-beec-4636c6fb5f68",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-6d61c73f-950c-4960-a29b-6b7b40018c65",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 8,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-25bd87fb-a292-4edb-a044-41a34f918b48",
+            "hand_number": 4,
+            "context": {
+              "session_id": "s-afae0698-ed4e-4078-ba1e-afc5d95d3a28",
+              "capacity": 9,
+              "hero_occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-71a506bd-9358-4cfb-a08d-528015ad81b0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-a4c6feae-dce6-4645-bb7b-e63b34a4dc0b",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-8b85644e-9a5c-4b16-98bb-0d121f8fc58a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-320ca8f2-5f6b-4d09-85f5-b4a39c8b6344",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-eafb7115-a614-4f9e-beec-4636c6fb5f68",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-6d61c73f-950c-4960-a29b-6b7b40018c65",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 1,
+              "small_blind_seat_id": 2,
+              "big_blind_seat_id": 3,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-56d00146-0ace-428d-ab08-baa82cccd6dd",
+            "hand_number": 5,
+            "context": {
+              "session_id": "s-afae0698-ed4e-4078-ba1e-afc5d95d3a28",
+              "capacity": 9,
+              "hero_occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-f5d2711d-fd39-4285-9ae4-f533cc2344b4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-71a506bd-9358-4cfb-a08d-528015ad81b0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-a4c6feae-dce6-4645-bb7b-e63b34a4dc0b",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-8b85644e-9a5c-4b16-98bb-0d121f8fc58a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-320ca8f2-5f6b-4d09-85f5-b4a39c8b6344",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-eafb7115-a614-4f9e-beec-4636c6fb5f68",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-6d61c73f-950c-4960-a29b-6b7b40018c65",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 2,
+              "small_blind_seat_id": 3,
+              "big_blind_seat_id": 4,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "departures-6-375 four consecutive commits return to automatic rotation",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-4ef7554f-4a95-4a0b-ac19-9cf4b27d7d9f",
+            "hand_number": 1,
+            "context": {
+              "session_id": "s-2f89e166-3bd5-4b99-90f9-a42657f2436c",
+              "capacity": 6,
+              "hero_occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-df002ef0-e39c-4821-b905-46ee4c79745e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-8580481d-97f4-4987-8b18-06c5111bdea5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-6593e01b-6010-43d6-801d-4731c547ff73",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-a4dae62f-8884-4195-908a-d7e4adcfd51b",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-bdde61a5-4cec-4acc-8b26-550bda9e22b2",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 4,
+              "small_blind_seat_id": 5,
+              "big_blind_seat_id": 6,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-1d68d99b-8721-4bbe-b4ef-1be48c07bf66",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-2f89e166-3bd5-4b99-90f9-a42657f2436c",
+              "capacity": 6,
+              "hero_occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-df002ef0-e39c-4821-b905-46ee4c79745e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-8580481d-97f4-4987-8b18-06c5111bdea5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-6593e01b-6010-43d6-801d-4731c547ff73",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 5,
+              "small_blind_seat_id": null,
+              "big_blind_seat_id": 1,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-07d945d2-9fbe-4f6a-9819-b9d67a2ff806",
+            "hand_number": 3,
+            "context": {
+              "session_id": "s-2f89e166-3bd5-4b99-90f9-a42657f2436c",
+              "capacity": 6,
+              "hero_occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-df002ef0-e39c-4821-b905-46ee4c79745e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-8580481d-97f4-4987-8b18-06c5111bdea5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-6593e01b-6010-43d6-801d-4731c547ff73",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 5,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-024abb21-0f56-4036-b285-cb04a4292af9",
+            "hand_number": 4,
+            "context": {
+              "session_id": "s-2f89e166-3bd5-4b99-90f9-a42657f2436c",
+              "capacity": 6,
+              "hero_occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-df002ef0-e39c-4821-b905-46ee4c79745e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-8580481d-97f4-4987-8b18-06c5111bdea5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-6593e01b-6010-43d6-801d-4731c547ff73",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 1,
+              "small_blind_seat_id": 2,
+              "big_blind_seat_id": 3,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-d1081f51-3ef9-4973-9ed6-24e889c8953c",
+            "hand_number": 5,
+            "context": {
+              "session_id": "s-2f89e166-3bd5-4b99-90f9-a42657f2436c",
+              "capacity": 6,
+              "hero_occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-0339d414-ce6a-43c4-965d-212ff6732bb5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-df002ef0-e39c-4821-b905-46ee4c79745e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-8580481d-97f4-4987-8b18-06c5111bdea5",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-6593e01b-6010-43d6-801d-4731c547ff73",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 2,
+              "small_blind_seat_id": 3,
+              "big_blind_seat_id": 4,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "departures-8-375 four consecutive commits return to automatic rotation",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-0239445b-741b-4886-ad3f-ac186910bf4a",
+            "hand_number": 1,
+            "context": {
+              "session_id": "s-ea0717ed-571f-4724-aa03-066099f2fc3f",
+              "capacity": 8,
+              "hero_occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-8a3efc8a-318f-4060-a598-7828ba1df4c4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-e6dbac67-6dc6-4ec2-8195-0511ccd3cd51",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-79968549-9608-4a7d-88b4-0340a5f0cfbf",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-55e08108-734f-44b3-903c-b54219f79732",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-504c9ca3-d5c8-4427-b726-35b1d33a0918",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-11e97e8b-378f-4c66-8c9f-b116554c9c8c",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 8,
+                  "occupant_id": "p-cc53f6d2-7c23-4aaf-9daf-fe3ca959b0df",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 6,
+              "small_blind_seat_id": 7,
+              "big_blind_seat_id": 8,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-c304ccdf-11c5-4b50-977f-953ac06cdc11",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-ea0717ed-571f-4724-aa03-066099f2fc3f",
+              "capacity": 8,
+              "hero_occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-8a3efc8a-318f-4060-a598-7828ba1df4c4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-e6dbac67-6dc6-4ec2-8195-0511ccd3cd51",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-79968549-9608-4a7d-88b4-0340a5f0cfbf",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-55e08108-734f-44b3-903c-b54219f79732",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-504c9ca3-d5c8-4427-b726-35b1d33a0918",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 7,
+              "small_blind_seat_id": null,
+              "big_blind_seat_id": 1,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-44cbb17e-89fd-45ee-87cc-d1c2c13237b1",
+            "hand_number": 3,
+            "context": {
+              "session_id": "s-ea0717ed-571f-4724-aa03-066099f2fc3f",
+              "capacity": 8,
+              "hero_occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-8a3efc8a-318f-4060-a598-7828ba1df4c4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-e6dbac67-6dc6-4ec2-8195-0511ccd3cd51",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-79968549-9608-4a7d-88b4-0340a5f0cfbf",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-55e08108-734f-44b3-903c-b54219f79732",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-504c9ca3-d5c8-4427-b726-35b1d33a0918",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 7,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-9036a3b5-4196-4da5-9c43-24530dbd99ba",
+            "hand_number": 4,
+            "context": {
+              "session_id": "s-ea0717ed-571f-4724-aa03-066099f2fc3f",
+              "capacity": 8,
+              "hero_occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-8a3efc8a-318f-4060-a598-7828ba1df4c4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-e6dbac67-6dc6-4ec2-8195-0511ccd3cd51",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-79968549-9608-4a7d-88b4-0340a5f0cfbf",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-55e08108-734f-44b3-903c-b54219f79732",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-504c9ca3-d5c8-4427-b726-35b1d33a0918",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 1,
+              "small_blind_seat_id": 2,
+              "big_blind_seat_id": 3,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-baed8415-731d-47eb-bd57-9f926af61d1b",
+            "hand_number": 5,
+            "context": {
+              "session_id": "s-ea0717ed-571f-4724-aa03-066099f2fc3f",
+              "capacity": 8,
+              "hero_occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-d45edce2-96da-43c0-b2a2-994fb91518f0",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-8a3efc8a-318f-4060-a598-7828ba1df4c4",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-e6dbac67-6dc6-4ec2-8195-0511ccd3cd51",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-79968549-9608-4a7d-88b4-0340a5f0cfbf",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-55e08108-734f-44b3-903c-b54219f79732",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-504c9ca3-d5c8-4427-b726-35b1d33a0918",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 2,
+              "small_blind_seat_id": 3,
+              "big_blind_seat_id": 4,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "departures-9-375 four consecutive commits return to automatic rotation",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-bfe01b6d-37f4-4c9e-a4ed-e147f6830d38",
+            "hand_number": 1,
+            "context": {
+              "session_id": "s-fb0b86c3-7101-4cdd-9792-1ce80bb8db5c",
+              "capacity": 9,
+              "hero_occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-33cd287b-7bba-46de-98da-963e1a1a91ad",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-65b8ad9b-ebda-43e4-a828-ea20cc7ad70e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-30d5cf8b-a8d6-46e0-8764-6fad355f68b3",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-3ad89433-1caf-4c37-ac5d-61803a8c0a0a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-d6d3bf67-2f5b-4081-8a68-14d2ceb2bc19",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-375315c8-028a-4255-9018-2a8c54098c16",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 8,
+                  "occupant_id": "p-108d70f8-7d31-4a9e-9614-4f955e4c36f1",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 9,
+                  "occupant_id": "p-8db711f5-649e-4830-aef9-3dba65becd95",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 7,
+              "small_blind_seat_id": 8,
+              "big_blind_seat_id": 9,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-3748e322-9c95-493b-9b48-09748520b8e4",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-fb0b86c3-7101-4cdd-9792-1ce80bb8db5c",
+              "capacity": 9,
+              "hero_occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-33cd287b-7bba-46de-98da-963e1a1a91ad",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-65b8ad9b-ebda-43e4-a828-ea20cc7ad70e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-30d5cf8b-a8d6-46e0-8764-6fad355f68b3",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-3ad89433-1caf-4c37-ac5d-61803a8c0a0a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-d6d3bf67-2f5b-4081-8a68-14d2ceb2bc19",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-375315c8-028a-4255-9018-2a8c54098c16",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 8,
+              "small_blind_seat_id": null,
+              "big_blind_seat_id": 1,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-b0eb0da4-46a2-4993-b122-dc090df93785",
+            "hand_number": 3,
+            "context": {
+              "session_id": "s-fb0b86c3-7101-4cdd-9792-1ce80bb8db5c",
+              "capacity": 9,
+              "hero_occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-33cd287b-7bba-46de-98da-963e1a1a91ad",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-65b8ad9b-ebda-43e4-a828-ea20cc7ad70e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-30d5cf8b-a8d6-46e0-8764-6fad355f68b3",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-3ad89433-1caf-4c37-ac5d-61803a8c0a0a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-d6d3bf67-2f5b-4081-8a68-14d2ceb2bc19",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-375315c8-028a-4255-9018-2a8c54098c16",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 8,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-16a5f231-adbb-4852-8a36-c31cc14f4e0c",
+            "hand_number": 4,
+            "context": {
+              "session_id": "s-fb0b86c3-7101-4cdd-9792-1ce80bb8db5c",
+              "capacity": 9,
+              "hero_occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-33cd287b-7bba-46de-98da-963e1a1a91ad",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-65b8ad9b-ebda-43e4-a828-ea20cc7ad70e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-30d5cf8b-a8d6-46e0-8764-6fad355f68b3",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-3ad89433-1caf-4c37-ac5d-61803a8c0a0a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-d6d3bf67-2f5b-4081-8a68-14d2ceb2bc19",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-375315c8-028a-4255-9018-2a8c54098c16",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 1,
+              "small_blind_seat_id": 2,
+              "big_blind_seat_id": 3,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-ba36fcf1-263a-48c5-babd-583a5e7e3fee",
+            "hand_number": 5,
+            "context": {
+              "session_id": "s-fb0b86c3-7101-4cdd-9792-1ce80bb8db5c",
+              "capacity": 9,
+              "hero_occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-ff7ac3fe-9784-451e-bfba-dd8a06697133",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-33cd287b-7bba-46de-98da-963e1a1a91ad",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-65b8ad9b-ebda-43e4-a828-ea20cc7ad70e",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-30d5cf8b-a8d6-46e0-8764-6fad355f68b3",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-3ad89433-1caf-4c37-ac5d-61803a8c0a0a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 6,
+                  "occupant_id": "p-d6d3bf67-2f5b-4081-8a68-14d2ceb2bc19",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 7,
+                  "occupant_id": "p-375315c8-028a-4255-9018-2a8c54098c16",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 2,
+              "small_blind_seat_id": 3,
+              "big_blind_seat_id": 4,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "saved-invalid-1440 recovery preserves hand and balances",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-22333ef6-2879-480e-8974-33af035f43f5",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-a58d0e2e-9467-4e4e-8d23-386445580e12",
+              "capacity": 6,
+              "hero_occupant_id": "p-8a00f33c-83f8-4990-86e5-174ab6c1a13a",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-8a00f33c-83f8-4990-86e5-174ab6c1a13a",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-dbfb4f08-fc39-4dba-88a5-1701eb514f68",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-006861b0-cb25-4f4c-9e13-9451db3bd1fa",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-c75841cb-1b23-4add-bf21-107814491858",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 4,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 25
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "saved-invalid-375 recovery preserves hand and balances",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-f4f74b37-4bac-4352-80f5-5ddfc3b994b1",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-961b2126-c01a-4290-b526-3981420c0131",
+              "capacity": 6,
+              "hero_occupant_id": "p-150efabc-d187-4f54-8af7-70eb40a94cc3",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-150efabc-d187-4f54-8af7-70eb40a94cc3",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-5b44f656-99e3-44b9-8a79-93c2cb190271",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-984d4b7b-49c7-425a-8053-7bec4bc532e9",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-3d7e3687-5aaf-460d-b559-8903268c2ab2",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 4,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 25
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "saved-invalid-320 recovery preserves hand and balances",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-ef42a5f9-c028-482d-9898-0fc43160aab9",
+            "hand_number": 2,
+            "context": {
+              "session_id": "s-ce1f89b6-8d07-4c26-991a-552e510fffd1",
+              "capacity": 6,
+              "hero_occupant_id": "p-740f337b-5d5c-4aa7-bc9a-c532e23d3146",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-740f337b-5d5c-4aa7-bc9a-c532e23d3146",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-a8518c5e-3a4f-47a3-b036-8d612dbb46aa",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-b0e07588-ac83-447c-8ee9-4a5293975934",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-bdc9aa42-9dec-4042-9036-310bed0be339",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 4,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 25
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    },
+    {
+      "name": "new-player-and-manual-position",
+      "passed": true,
+      "prepares": [
+        {
+          "body": {
+            "protocol_version": 2,
+            "hand_id": "h-eced8363-3e34-4198-8534-378beaddad44",
+            "hand_number": 3,
+            "context": {
+              "session_id": "s-dac90286-cfea-4de6-9add-73beef71972f",
+              "capacity": 6,
+              "hero_occupant_id": "p-6d3f500a-09eb-4e8b-a0da-cd4f39206992",
+              "participants": [
+                {
+                  "seat_id": 1,
+                  "occupant_id": "p-6d3f500a-09eb-4e8b-a0da-cd4f39206992",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 2,
+                  "occupant_id": "p-6c7c95a5-2198-4c22-9ee3-6963d37be82b",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 3,
+                  "occupant_id": "p-8e30aaae-4d82-4a45-8e14-a846e06ac53f",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 4,
+                  "occupant_id": "p-c33d43c7-3508-4d22-be6c-a57bb21d1268",
+                  "starting_chips": 10000
+                },
+                {
+                  "seat_id": 5,
+                  "occupant_id": "p-6bd7300d-681e-44f9-aecd-b61107fa7b4f",
+                  "starting_chips": 10000
+                }
+              ],
+              "button_seat_id": 6,
+              "small_blind_seat_id": 1,
+              "big_blind_seat_id": 2,
+              "blinds": {
+                "sb": 100,
+                "bb": 200,
+                "ante_each": 0
+              },
+              "learning_enabled": false,
+              "profile_names": {},
+              "icm": {
+                "scope": "off",
+                "payouts": []
+              }
+            }
+          },
+          "status": 200
+        }
+      ]
+    }
+  ]
+}

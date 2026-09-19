@@ -16,4 +16,8 @@
 
 加注单位专项：`node tests/browser/raise-units.e2e.mjs`。检查 BB/筹码输入、单位切换保留金额、真实接口收到的整数筹码、越界拦截、零头取整确认与取消、全下上限、循环小数最小加注、刷新恢复单位、375px 布局，以及跟注不使用加注输入框。输出由 `POKER_RAISE_OUTPUT` 指定，默认 `docs/screenshots/raise-units-2026-09-19/`；该专项单独运行。
 
+位置续手专项：`node tests/browser/positions.e2e.mjs`。覆盖6/8/9座的双盲离桌、空庄位/空小盲连续续手、恢复普通轮转、新人入座、旧错误草稿恢复与合法手动校准保留。桌面点击及手机触控均调用真实prepare接口；旧存档案例通过领域模块构造后刷新验证。`POKER_POSITIONS_OUTPUT` 指定输出，默认 `docs/screenshots/positions-fix-2026-09-19/`。
+
+牌桌布局专项：`node tests/browser/table-layout.e2e.mjs`。覆盖6/8/9座、320/375/390/768/1440px、进行中/结算中共30组，检查含位置文字和估算标记的座位、公共牌、底牌、底池之间的重叠及页面溢出。输出由 `POKER_LAYOUT_OUTPUT` 指定，默认 `docs/screenshots/positions-fix-2026-09-19/table-layout/`。上述两个专项需单独运行，不包含在 `_verify_all.py --browser` 中。
+
 扩展脚本用真实接口响应和受控 `Response.json()` 延迟验证并发，手机宽度使用触控点击。覆盖精度与取整确认、完整F3、双击与慢prepare、取消结算纠错、保存失败恢复、学习开启/关闭/迟到失败、3人到单挑、ICM转桌校准、损坏存档、105手领域历史窗口的配套验收，以及45种布局组合。浏览器重启测试会打印 `QA_PROFILE`；成功后该临时用户目录可按工作约定核对清理。此脚本没有真实手机软键盘，不将该项计为通过。

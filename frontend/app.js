@@ -10,7 +10,7 @@ import {
   buildSettlementDraft, editSettlementRow, confirmAllCurrentValues,
   validateSettlement, beginCommit, completeCommit,
   emptyNextHandDraft, applyRosterEdit, applyDraftPositions, setDraftBlinds,
-  previewNextPositions, automaticNextPositions, rolesForSeat,
+  previewNextPositions, automaticNextPositions, normalizePositions, rolesForSeat,
   heroSeatOf, rangePositionFor, buildHandContext, DomainError,
   pendingLearningJobs, markLearningJob, previewRoster, assertCommitCurrent, activeSeats,
 } from "./session.js";
@@ -684,22 +684,41 @@ function renderPositionPreview(container) {
   }
   const changed = needsCalibration(s);
   const preview = draft.positions || (changed ? previewNextPositions(s, draft.rosterEdits) : automaticNextPositions(s));
-  container.innerHTML = `<p class="footnote">${changed ? "名单已变化，请核对现场位置" : "下一手自动轮转"} · 庄位 ${preview.buttonSeatId ?? "空"} · 小盲 ${preview.smallBlindSeatId ?? "空"} · 大盲 ${preview.bigBlindSeatId ?? "空"}</p>
+  const positionError = positions => {
+    try { normalizePositions(positions, candidate.seats, candidate.occupants, s.blindLevel.bb); return ""; }
+    catch (e) { return e.message; }
+  };
+  const initialError = positionError(preview);
+  container.innerHTML = `<p class="footnote">${changed ? "请核对下一手庄位和盲位" : "下一手自动轮转"} · 庄位 ${preview.buttonSeatId ?? "空"} · 小盲 ${preview.smallBlindSeatId ?? "空"} · 大盲 ${preview.bigBlindSeatId ?? "空"}</p>
     <div class="setup-row">
       <label>庄位 <input type="number" id="pos-btn" min="1" max="${s.capacity}" value="${preview.buttonSeatId ?? ""}"></label>
       <label>小盲（可留空）<input type="number" id="pos-sb" min="1" max="${s.capacity}" value="${preview.smallBlindSeatId ?? ""}"></label>
       <label>大盲 <input type="number" id="pos-bb" min="1" max="${s.capacity}" value="${preview.bigBlindSeatId ?? ""}"></label>
-    </div><label class="switch-line"><input type="checkbox" id="pos-confirm" ${draft.positions?.confirmed ? "checked" : ""}> 已核对现场位置</label>`;
+    </div><button type="button" class="ghost-btn" id="pos-regenerate">重新生成位置</button>
+    <p class="form-error" id="position-error" role="alert" ${initialError ? "" : "hidden"}>${esc(initialError)}</p>
+    <label class="switch-line"><input type="checkbox" id="pos-confirm" ${draft.positions?.confirmed && !initialError ? "checked" : ""}> 已核对现场位置</label>`;
   const save = confirmed => {
-    applyDraftPositions(draft, {buttonSeatId: Number($("#pos-btn").value),
+    const positions = {buttonSeatId: Number($("#pos-btn").value),
       smallBlindSeatId: $("#pos-sb").value === "" ? null : Number($("#pos-sb").value),
-      bigBlindSeatId: Number($("#pos-bb").value), source: "manual", confirmed});
+      bigBlindSeatId: Number($("#pos-bb").value), source: "manual"};
+    const error = positionError(positions);
+    applyDraftPositions(draft, {...positions, confirmed: confirmed && !error});
+    $("#pos-confirm").checked = draft.positions.confirmed;
+    $("#position-error").textContent = error;
+    $("#position-error").hidden = !error;
     persist();
   };
   container.querySelectorAll('input[type="number"]').forEach(el => el.oninput = () => {
     $("#pos-confirm").checked = false; save(false);
   });
   container.querySelector("#pos-confirm").onchange = e => save(e.target.checked);
+  container.querySelector("#pos-regenerate").onclick = () => {
+    draft.positions = null;
+    persist();
+    showSettleError("");
+    renderPositionPreview(container);
+    container.querySelector("#pos-confirm").focus({preventScroll: true});
+  };
 }
 
 async function commitSettlement(area) {
