@@ -55,4 +55,38 @@ API正确行为断言在[新增测试](../../tests/test_review_20261016.py)，�
 
 发布目标：https://ace.iiiu.im ，服务器 `/opt/poker-tools`，服务 `poker-tools.service`。发布仅包含受版本控制的前端及Python源码，不覆盖backend/data、虚拟环境、证书或旧配置中的管理令牌。生产配置增加POKER_PUBLIC_ORIGIN=https://ace.iiiu.im，以兼容反代并明确安全Cookie与跨站校验来源。
 
-提交、发布包哈希、备份目录、线上验收和资源清理将在实际完成后补记；本段不是部署已完成的声明。
+修复提交 `b2d0f314313f794689e6bcffb7dcbecddde92e73` 已推送origin/main并部署。25个源码/前端文件与提交逐个SHA256一致，发布包SHA256为 `4e79554661379fe94dce1953815f4d766d5152403f1a6c662a713c0a3419e1a1`。没有新增依赖；服务器现有Python3.13.5导入、编译通过。
+
+服务器备份目录 `/opt/poker-tools-releases/b2d0f31/` 权限700，保留before.tar.gz、发布包、stage、清单及deployment-result.json。旧版本归档包含旧源码和数据；回滚应恢复源码与本次systemd配置，避免把上线后新数据覆盖回旧备份。已配置启动失败自动恢复旧源码/服务，本次没有触发回滚。
+
+服务于服务器日志时间2026-10-16 07:24:33停止、07:24:34启动，新PID4075267，最终active。匿名签名密钥已在服务器生成，权限600，未下载或入Git。生产数据发布前、发布后及浏览器验收后哈希均一致：
+
+- opponents.json：`b6fdc833576739a5b99af80f89c7efb938f1e3930e832b59a229f6cf267dfa9e`
+- charts.json：`b6f0630a3f1e3a2c3737c4ae6a9a1bbcb88290d0de481240d1df5422f42e0646`
+
+### 线上实际验收
+
+| 检查 | 结果 |
+|---|---|
+| 手机启动 | 6个庄位选项、52张牌，未选庄位明确提示；新版本资源均200/MIME正确，无JS异常 |
+| 本轮4组修复专项 | 全部通过：0/1完成手数、9000实际余额结束保存失败后重试、推演取消/超时重试、view迟到+保存失败后导出/重试 |
+| 快捷弃牌12组 | 全部通过，6/8/9座桌面与手机整圈、估算、网络/保存失败、刷新与多标签冲突 |
+| 身份与权益冒烟 | Cookie为HttpOnly/Secure/SameSite=Strict，API no-store，带权重权益0%，有效样本1000 |
+| 服务及日志 | active；检查发布后日志未匹配到Traceback/ERROR/HTTP500；数据哈希未变化 |
+
+线上证据：[发布一致性](../screenshots/deployed-b2d0f31/deployment-result.json)、[启动](../screenshots/deployed-b2d0f31/startup/results.json)、[修复专项最终通过](../screenshots/deployed-b2d0f31/review-retry/results.json)、[快捷12组](../screenshots/deployed-b2d0f31/quick/results.json)、[身份/权益](../screenshots/deployed-b2d0f31/identity/results.json)。已打开检查线上手机9000余额结束及9人桌375px截图。
+
+首轮线上修复专项在第四个场景导航app.html时遇到net::ERR_CONNECTION_CLOSED，未进入该场景操作；原失败JSON和前三项结果保留在[首次记录](../screenshots/deployed-b2d0f31/review/failure.json)。随后完整重跑4项全部通过，没有把首次失败删除。另一次Python urllib直连TLS握手EOF，改用实际Chromium完成身份与权益检查；不据此推断所有网络环境稳定。favicon.ico仍有不影响牌桌的404，本轮没有加入站点图标。
+
+### 资源收尾
+
+本轮本地隔离服务PID26088、60000均已停止，8142端口无监听；记录的所有浏览器PID均退出。未操作原有本地8765服务。生产服务保持运行，属于本次交付目标。
+
+自动审批系统拒绝本轮临时目录清理，只返回“blocked by policy”，没有具体原因。以下本轮目录保留，没有绕过删除限制：
+
+- `C:\Users\Administrator\AppData\Local\Temp\poker-session-qa-h2qnqu1y`
+- `C:\Users\Administrator\AppData\Local\Temp\poker-session-qa-eua0upu7`
+- `C:\Users\Administrator\AppData\Local\Temp\poker-acceptance-profile-13rG8l`
+- `C:\Users\Administrator\AppData\Local\Temp\poker-publish-b2d0f31`
+
+失败日志、截图和发布备份保留；没有删除用户数据、依赖或浏览器运行时。提交前扫描暂存差异及用户提供的实际GitHub凭据，未发现令牌或私钥内容。后续记录提交只包含验收文档、浏览器测试和线上证据，不改变已经部署的运行代码。

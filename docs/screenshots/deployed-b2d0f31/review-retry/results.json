@@ -1,0 +1,21 @@
+{
+  "results": [
+    {
+      "name": "empty-and-completed-count",
+      "pass": true
+    },
+    {
+      "name": "settle-and-end-preserves-actual",
+      "pass": true
+    },
+    {
+      "name": "advice-cancel-timeout-and-retry",
+      "pass": true
+    },
+    {
+      "name": "late-view-and-quota-failure-unlock",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

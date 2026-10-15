@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "orbit-6-1440",
+      "passed": true
+    },
+    {
+      "name": "orbit-8-1440",
+      "passed": true
+    },
+    {
+      "name": "orbit-9-1440",
+      "passed": true
+    },
+    {
+      "name": "orbit-6-375",
+      "passed": true
+    },
+    {
+      "name": "orbit-8-375",
+      "passed": true
+    },
+    {
+      "name": "orbit-9-375",
+      "passed": true
+    },
+    {
+      "name": "calibrate-one-seat-and-review",
+      "passed": true
+    },
+    {
+      "name": "network-double-click-and-save-failure",
+      "passed": true
+    },
+    {
+      "name": "post-call-fold-and-already-folded",
+      "passed": true
+    },
+    {
+      "name": "rapid-second-tap-and-calibration-during-guard",
+      "passed": true
+    },
+    {
+      "name": "manual-unknown-result-estimates-only-opponents",
+      "passed": true
+    },
+    {
+      "name": "late-quick-response-after-tab-conflict",
+      "passed": true
+    }
+  ]
+}

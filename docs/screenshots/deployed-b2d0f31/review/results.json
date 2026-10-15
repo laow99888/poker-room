@@ -1,0 +1,17 @@
+{
+  "results": [
+    {
+      "name": "empty-and-completed-count",
+      "pass": true
+    },
+    {
+      "name": "settle-and-end-preserves-actual",
+      "pass": true
+    },
+    {
+      "name": "advice-cancel-timeout-and-retry",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

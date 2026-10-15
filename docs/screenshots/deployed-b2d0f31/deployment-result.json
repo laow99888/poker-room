@@ -1,0 +1,15 @@
+{
+  "commit": "b2d0f314313f794689e6bcffb7dcbecddde92e73",
+  "package_sha256": "4e79554661379fe94dce1953815f4d766d5152403f1a6c662a713c0a3419e1a1",
+  "verified_files": 25,
+  "data_before": {
+    "backend/data/opponents.json": "b6fdc833576739a5b99af80f89c7efb938f1e3930e832b59a229f6cf267dfa9e",
+    "backend/data/charts.json": "b6f0630a3f1e3a2c3737c4ae6a9a1bbcb88290d0de481240d1df5422f42e0646"
+  },
+  "data_after": {
+    "backend/data/opponents.json": "b6fdc833576739a5b99af80f89c7efb938f1e3930e832b59a229f6cf267dfa9e",
+    "backend/data/charts.json": "b6f0630a3f1e3a2c3737c4ae6a9a1bbcb88290d0de481240d1df5422f42e0646"
+  },
+  "service": "active",
+  "rollback": "/opt/poker-tools-releases/b2d0f31/before.tar.gz"
+}

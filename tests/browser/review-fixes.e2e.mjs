@@ -141,7 +141,9 @@ try {
   assert.deepEqual(errors,[]);
 } catch(e) {
   await writeFile(resolve(out,'failure.json'),JSON.stringify({stage,error:String(e),errors},null,2));
-  if(page)await page.screenshot({path:resolve(out,'failure.png'),fullPage:true});
+  if(page&&!page.isClosed()) {
+    try {await page.screenshot({path:resolve(out,'failure.png'),fullPage:true});} catch { /* 保留原始导航/断连错误 */ }
+  }
   throw e;
 } finally {
   await writeFile(resolve(out,'results.json'),JSON.stringify({results,errors},null,2));
