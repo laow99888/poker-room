@@ -7,8 +7,10 @@
 
 import random
 import time
+import math
 
 from .ranges import InvalidHandError, expand_range
+from .compute_budget import checkpoint
 
 try:
     import eval7
@@ -41,6 +43,17 @@ ALL_CARDS = [r + s for r in "AKQJT98765432" for s in "cdhs"]
 
 class EquityError(ValueError):
     """输入不合法（重复牌、牌数不对等）。"""
+
+
+def validate_weights(weights):
+    if weights is None:
+        return None
+    if not isinstance(weights, list) or not weights or any(
+        isinstance(w, bool) or not isinstance(w, (int, float))
+        or not 0 <= w <= 1e308 or not math.isfinite(w) for w in weights
+    ) or not 0 < sum(weights) < float("inf"):
+        raise EquityError("权重须为有限非负数，且总和为正有限数")
+    return weights
 
 
 def _parse_card(text: str, seen: set) -> str:
@@ -89,7 +102,7 @@ def validate_inputs(hero, villains, board):
             specs.append(("range", combos))
         elif kind == "combos":
             pairs = v.get("combos") or []
-            weights = v.get("weights")
+            weights = validate_weights(v.get("weights"))
             if weights is not None and len(weights) != len(pairs):
                 raise EquityError(f"对手 {idx} 的权重数与组合数不一致")
             cleaned = []
@@ -165,7 +178,7 @@ def simulate(hero, villains, board, iterations, seed=None):
     known = used
     filtered_pools = []
     for pool in range_pools:
-        keep = [(pair, w) for pair, w in pool if pair[0] not in known and pair[1] not in known]
+        keep = [(pair, w) for pair, w in pool if w > 0 and pair[0] not in known and pair[1] not in known]
         if not keep:
             raise EquityError(
                 "对手范围的全部组合都与已知牌（底牌/公共牌）冲突，无法计算")
@@ -174,23 +187,24 @@ def simulate(hero, villains, board, iterations, seed=None):
     exact = False
     wins = ties = losses = 0.0
     share_sum = 0.0
-    trials = iterations
 
     if not filtered_pools and need_board == 0:
         (wins, ties, losses), sh = score_trial(board_cards)
         share_sum = sh
-        exact, trials = True, 1
+        exact = True
     elif not filtered_pools and need_board == 1:
         for extra in sorted(base_deck):   # 18：固定牌序，set 不直接进抽样
             (w, t, l), sh = score_trial(board_cards + [_card(extra)])
             wins += w; ties += t; losses += l
             share_sum += sh
-        exact, trials = True, len(base_deck)
+        exact = True
     else:
         # --- 01：联合拒绝采样。任一对手撞牌就整组重抽（不是只重抽后一家），
         # 保证合法联合分布与对手顺序无关；带尝试上限，不可能时明确报错。
         failed = 0
         for _ in range(iterations):
+            if _ % 128 == 0:
+                checkpoint()
             for _attempt in range(50):
                 avail_set = set(base_deck)
                 villain_hands = []
@@ -225,7 +239,9 @@ def simulate(hero, villains, board, iterations, seed=None):
     result = {
         "engine": ENGINE,
         "exact": exact,
-        "iterations": trials,
+        "iterations": int(total),
+        "requested_iterations": iterations,
+        "rejected_iterations": 0 if exact else iterations - int(total),
         "elapsedMs": int((time.perf_counter() - start) * 1000),
         "win": round(wins * 100 / eff_trials, 2),
         "tie": round(ties * 100 / eff_trials, 2),

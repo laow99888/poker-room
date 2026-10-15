@@ -38,6 +38,9 @@ export function validateSchema(data) {
   if (!data.icm || !Array.isArray(data.icm.payouts) || !Array.isArray(data.recentHands)) errors.push("ICM/历史结构非法");
   if (!data.occupants?.[data.heroOccupantId]) errors.push("我的身份缺失");
   if (!data.positions || !Number.isInteger(data.handNumber)) errors.push("位置/手号缺失");
+  if (data.completedHands !== undefined && (!Number.isSafeInteger(data.completedHands) || data.completedHands < 0)) {
+    errors.push("累计完成手数非法");
+  }
   const ids = new Set(), seated = new Set();
   for (const seat of Array.isArray(data.seats) ? data.seats : []) {
     if (!seat || !Number.isInteger(seat.id) || seat.id < 1 || seat.id > data.capacity || ids.has(seat.id)) {

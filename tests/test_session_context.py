@@ -399,7 +399,10 @@ def test_a04_v2_record_complete_hand_with_uid():
                     headers={"X-Player-Id": "u-a4"}, json=body)
     assert r.status_code == 200, r.text
     assert r.json()["recorded"]["recorded"] is True
-    user = opponents_mod._load()["users"]["u-a4"]
+    from backend.browser_identity import identity, COOKIE
+    uid, _ = identity(client.cookies.get(COOKIE))
+    assert uid != "u-a4"  # 客户端身份头不再具有授权能力
+    user = opponents_mod._load()["users"][uid]
     # 代号按 range_position 落库（P2=BB、P6=BTN），其余进人群池
     assert "老王" in user["named"] and "阿强" in user["named"]
     r2 = client.post("/api/hand/v2/record",

@@ -1,7 +1,7 @@
 """对手建模（第二层）：玩家画像统计 + 贝叶斯式范围收窄。
 
 数据文件 backend/data/opponents.json。27：公开部署时多人共用本服务，
-具名档案按匿名用户 ID（前端生成的 X-Player-Id）分命名空间存储：
+具名档案按服务端签发的匿名用户 ID 分命名空间存储：
 
     {
       "users": { "<uid>": {"named": {...}, "_hand_ids": [...]}, ... },
@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import threading
+import tempfile
 from pathlib import Path
 
 _DATA = Path(__file__).resolve().parent / "data" / "opponents.json"
@@ -25,14 +26,40 @@ POOL = "_pool"
 _LOCK = threading.Lock()   # 公网多人同时记录手牌时串行化读改写
 
 
+class StatsStorageError(RuntimeError):
+    """统计存储损坏或不可读；必须保留原文，禁止以空库继续覆盖。"""
+
+
 def _load() -> dict:
-    if _DATA.exists():
-        try:
-            data = json.loads(_DATA.read_text(encoding="utf-8"))
-            return _migrate(data)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {"users": {}}
+    try:
+        raw = _DATA.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {"users": {}}
+    except (OSError, UnicodeError) as exc:
+        raise StatsStorageError("统计文件不可读，原文件已保留") from exc
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict) or ("users" in data and not isinstance(data["users"], dict)):
+            raise ValueError("invalid statistics structure")
+        for user in data.get("users", {}).values():
+            if (not isinstance(user, dict) or not isinstance(user.get("named", {}), dict)
+                    or not isinstance(user.get("_hand_ids", []), list)):
+                raise ValueError("invalid user structure")
+        data = _migrate(data)
+        if "_pool_pos" in data:
+            positions = data["_pool_pos"]
+            if not isinstance(positions, dict) or any(not isinstance(p, dict) for p in positions.values()):
+                raise ValueError("invalid pool structure")
+            # 修复旧版本未更新的共享池；从已有位置计数重建，不杜撰旧手数。
+            data[POOL] = {
+                "hands": sum(p.get("hands", 0) for p in positions.values()),
+                "vpip": sum(sum(p.get(k, 0) for k in ("opens", "threebets", "limps", "call_raise")) for p in positions.values()),
+                "pfr": sum(p.get("opens", 0) + p.get("threebets", 0) for p in positions.values()),
+                "threebet": sum(p.get("threebets", 0) for p in positions.values()),
+            }
+        return data
+    except (ValueError, UnicodeError, TypeError) as exc:
+        raise StatsStorageError("统计文件损坏，原文件已保留，请恢复备份") from exc
 
 
 def _migrate(data: dict) -> dict:
@@ -83,9 +110,21 @@ def _clean_name(name) -> str:
 def _save(data: dict) -> None:
     """先写临时文件再原子替换，避免并发读到写了一半的 JSON。"""
     _DATA.parent.mkdir(parents=True, exist_ok=True)
-    tmp = _DATA.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.replace(tmp, _DATA)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=_DATA.parent,
+                                     prefix=".opponents-", suffix=".tmp", delete=False) as f:
+        tmp = Path(f.name)
+        try:
+            json.dump(data, f, ensure_ascii=False, indent=1, allow_nan=False)
+            f.flush()
+            os.fsync(f.fileno())
+        except Exception:
+            f.close()
+            tmp.unlink(missing_ok=True)
+            raise
+    try:
+        os.replace(tmp, _DATA)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def hand_signature(config: dict, ops: list) -> str:
@@ -121,6 +160,9 @@ def _record_hand_locked(config, ops, names, intel, hero_index,
     sig = ("id:" + str(hand_id)[:64]) if hand_id else hand_signature(config, ops)
     if sig in ids:
         return {"recorded": False, "reason": "重复"}
+    if "completed_hands" not in user:
+        user["legacy_count_unknown"] = bool(ids)
+    user["completed_hands"] = user.get("completed_hands", 0) + 1
     ids.append(sig)
     if len(ids) > 5000:
         user["_hand_ids"] = ids[-4000:]
@@ -145,6 +187,13 @@ def _record_hand_locked(config, ops, names, intel, hero_index,
         pp = pool_pos.setdefault(pos, {"hands": 0, "opens": 0, "limps": 0,
                                        "threebets": 0, "call_raise": 0, "fold_raise": 0})
         pp["hands"] += 1
+        pool["hands"] += 1
+        if kind in ("open", "threebet", "limp", "call_raise"):
+            pool["vpip"] += 1
+        if kind in ("open", "threebet"):
+            pool["pfr"] += 1
+        if kind == "threebet":
+            pool["threebet"] += 1
         if kind == "open":
             pp["opens"] += 1
         elif kind == "threebet":
@@ -214,8 +263,12 @@ def summary(uid: str = "local") -> dict:
     pool_pos = data.get("_pool_pos", {})
     user = data.get("users", {}).get(_clean_uid(uid), {})
     named = {k: v for k, v in user.get("named", {}).items() if isinstance(v, dict)}
-    total = sum(pp.get("hands", 0) for pp in pool_pos.values())
-    return {"total_hands": total, "pool": pool_pos, "named": named}
+    samples = sum(pp.get("hands", 0) for pp in pool_pos.values())
+    legacy_unknown = user.get("legacy_count_unknown", bool(user.get("_hand_ids")) and "completed_hands" not in user)
+    return {"total_hands": None if legacy_unknown else user.get("completed_hands", 0),
+            "recorded_hands": user.get("completed_hands", 0),
+            "legacy_count_unknown": legacy_unknown,
+            "player_samples": samples, "pool": pool_pos, "named": named}
 
 
 def reset_user(uid: str) -> None:
@@ -228,4 +281,5 @@ def reset_user(uid: str) -> None:
 
 def reset_all() -> None:
     """清空全部学习数据（所有用户 + 人群池）；需管理令牌或本机调用。"""
-    _save({})
+    with _LOCK:
+        _save({})

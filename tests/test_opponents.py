@@ -60,6 +60,11 @@ def test_narrowing_flags_in_advice(stats_file):
     from fastapi.testclient import TestClient
     from backend.app import app
     client = TestClient(app)
+    client.get("/api/stats/summary/all")
+    from backend.browser_identity import identity, COOKIE
+    uid, _ = identity(client.cookies.get(COOKIE))
+    opponents._save({"schema": 2, "users": {uid: {"named": {"testn": {
+        "hands": 100, "vpip": 30, "pfr": 5, "threebet": 0}}, "_hand_ids": []}}})
     payload = {
         "config": {"player_count": 6, "sb": 100, "bb": 200, "ante": 25},
         "hero_pos": "BB", "hero_cards": ["As", "Ad"],

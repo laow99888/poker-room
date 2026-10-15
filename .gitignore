@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+backend/data/*.key
+backend/data/.session-key-*
+backend/data/*.tmp

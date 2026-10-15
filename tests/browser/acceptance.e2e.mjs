@@ -103,7 +103,8 @@ try {
   assert.equal(await count('record'),1);
   const req=await page.evaluate(()=>qa.requests.find(r=>r.path.endsWith('/record')));
   assert.equal(req.body.hand_id,first.currentHand.handId);assert.deepEqual(req.body.context,first.currentHand.context);
-  assert(req.headers['X-Player-Id']&&req.headers['X-Player-Id']!=='local');
+  assert(!req.headers['X-Player-Id'], '浏览器不再指定授权UID');
+  assert((await page.cookies()).some(c => c.name === 'poker_session' && c.httpOnly));
   await release('record');await page.waitForFunction(k=>Object.keys(JSON.parse(localStorage.getItem(k)).learningJobs).length===0,{},key);
   await finish('A04 automatic recording after commit uses original payload and user ID');
 

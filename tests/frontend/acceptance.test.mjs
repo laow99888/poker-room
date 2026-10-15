@@ -24,6 +24,7 @@ test('L09: 105 committed hands retain 100 summaries, every pending job, current 
     assert.deepEqual(S.completeCommit(s,tx),s);
   }
   assert.equal(s.recentHands.length,100);
+  assert.equal(s.completedHands,105);
   assert.equal(s.recentHands[0].handId,handIds[5]);
   assert.equal(Object.keys(s.learningJobs).length,105);
   assert.equal(s.learningJobs[handIds[0]].status,'failed');

@@ -416,7 +416,7 @@ def test_stats_reset_default_is_self_only(monkeypatch):
     # 未配置令牌：远程客户端也只能清自己
     recorded = client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
     assert recorded.status_code == 200 and recorded.json()["recorded"]["recorded"]
-    assert opp.get_stats("老张", uid="u-a")["hands"] == 1
+    assert client.get("/api/stats/老张").json()["hands"] == 1
     r = client.post("/api/stats/reset", headers={"X-Player-Id": "u-a"})
     assert r.json() == {"reset": "user"}, r.json()
     assert client.get("/api/stats/summary/all",
@@ -425,7 +425,7 @@ def test_stats_reset_default_is_self_only(monkeypatch):
     monkeypatch.setenv("POKER_ADMIN_TOKEN", "tok-1")
     recorded = client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
     assert recorded.status_code == 200 and recorded.json()["recorded"]["recorded"]
-    assert opp.get_stats("老张", uid="u-a")["hands"] == 1
+    assert client.get("/api/stats/老张").json()["hands"] == 1
     assert client.post("/api/stats/reset",
                   headers={"X-Player-Id": "u-a"}).json() == {"reset": "user"}
     assert client.get("/api/stats/summary/all",
@@ -433,7 +433,7 @@ def test_stats_reset_default_is_self_only(monkeypatch):
     # 错误令牌 ≠ 全清
     recorded = client.post("/api/stats/record", headers={"X-Player-Id": "u-a"}, json=payload)
     assert recorded.status_code == 200 and recorded.json()["recorded"]["recorded"]
-    assert opp.get_stats("老张", uid="u-a")["hands"] == 1
+    assert client.get("/api/stats/老张").json()["hands"] == 1
     r = client.post("/api/stats/reset",
                headers={"X-Player-Id": "u-a", "X-Admin-Token": "wrong"})
     assert r.json() == {"reset": "user"}

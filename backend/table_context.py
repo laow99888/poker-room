@@ -13,9 +13,8 @@
 
 from __future__ import annotations
 
-import math
-
 from .table import TableError
+from .icm import ICMError, validate_payouts
 
 MAX_SEATS = 9
 MIN_SEATS = 2
@@ -137,13 +136,10 @@ def validate_context(context: dict) -> dict:
     if scope not in ("off", "final_table"):
         raise _bad(f"未知 ICM scope：{scope!r}")
     if scope == "final_table":
-        if not isinstance(payouts, list) or not payouts or len(payouts) > n:
-            raise _bad("ICM 奖金结构无效：名次数须在 1–入局人数")
-        for p in payouts:
-            if isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) or p < 0:
-                raise _bad(f"ICM 奖金须为非负有限数值：{p!r}")
-        if sum(payouts) <= 0 or payouts != sorted(payouts, reverse=True):
-            raise _bad("奖金须按名次递减且总额大于 0")
+        try:
+            validate_payouts(payouts, n)
+        except ICMError as exc:
+            raise _bad(str(exc)) from exc
 
     learning = context.get("learning_enabled")
     if not isinstance(learning, bool):

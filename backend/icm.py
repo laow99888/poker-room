@@ -14,6 +14,7 @@ Malmuth–Harville 模型：名次从冠军端依次确定，下一个名次归�
 from __future__ import annotations
 
 from itertools import combinations
+import math
 
 __all__ = ["icm_equities", "ICMError"]
 
@@ -22,12 +23,28 @@ class ICMError(ValueError):
     """ICM 输入不合法。"""
 
 
+def validate_payouts(payouts, player_count=None, *, allow_empty=False, ordered=True, allow_zero=False):
+    """所有HTTP入口共用金额规则；先比较上限，避免超大整数转float溢出。"""
+    if not isinstance(payouts, list) or (not payouts and not allow_empty):
+        raise ICMError("奖金结构不能为空")
+    if player_count is not None and len(payouts) > player_count:
+        raise ICMError("奖金名次数不能超过人数")
+    if any(isinstance(p, bool) or not isinstance(p, (int, float))
+           or not 0 <= p <= 2**53 - 1 or not math.isfinite(p) for p in payouts):
+        raise ICMError("奖金须为非负有限数值且不超过安全金额上限")
+    if payouts and (not 0 <= sum(payouts) <= 2**53 - 1 or (not allow_zero and sum(payouts) == 0)
+                    or (ordered and payouts != sorted(payouts, reverse=True))):
+        raise ICMError("奖金须递减且总额在安全金额范围内")
+    return payouts
+
+
 def icm_equities(stacks, payouts) -> list[float]:
     """按 Malmuth–Harville 模型返回每个玩家的奖金期望。
 
     stacks: 记分牌（正数）；payouts: 名次奖金，从第 1 名开始，可短于人数（其余为 0）。
     返回与 stacks 同序的期望奖金列表，和 = 奖池总额。
     """
+    validate_payouts(payouts, len(stacks), ordered=False, allow_zero=True)
     stacks = [float(s) for s in stacks]
     payouts = [float(p) for p in payouts]
     n = len(stacks)

@@ -14,9 +14,10 @@ import {
   previewNextPositions, automaticNextPositions, normalizePositions, rolesForSeat,
   heroSeatOf, rangePositionFor, buildHandContext, DomainError,
   pendingLearningJobs, markLearningJob, previewRoster, assertCommitCurrent, activeSeats,
-} from "./session.js?v=startup-20260919-1";
-import * as Store from "./session-storage.js?v=startup-20260919-1";
-import { createCoordinator } from "./request-coordinator.js?v=startup-20260919-1";
+  endSession, completedHandsOf,
+} from "./session.js?v=review-20261016-1";
+import * as Store from "./session-storage.js?v=review-20261016-1";
+import { createCoordinator } from "./request-coordinator.js?v=review-20261016-1";
 
 /* --------------------------------------------------------------- 基础工具 */
 
@@ -307,18 +308,8 @@ async function postTable(url, body) {
 /* ------------------------------------------------------------- 保存状态 */
 
 function playerHeaders() {
-  // 27/A-04：匿名命名空间随头发送（与 logic.js 的 AppLogic.playerId 同一
-  // localStorage 键 paishi_uid；本页不加载 logic.js，这里内联同规则）。
-  let uid = "local";
-  try {
-    uid = localStorage.getItem("paishi_uid") || "local";
-    if (uid === "local") {
-      uid = (globalThis.crypto && globalThis.crypto.randomUUID)
-        ? globalThis.crypto.randomUUID() : `u-${Date.now()}`;
-      localStorage.setItem("paishi_uid", uid);
-    }
-  } catch (_e) { /* 隐私模式等：回退 local */ }
-  return { "X-Player-Id": uid };
+  // 同源fetch自动携带HttpOnly会话Cookie，客户端不再指定数据归属。
+  return {};
 }
 
 let learningSyncing = false;
@@ -621,6 +612,7 @@ function renderSettle() {
     <p class="form-error" id="settle-error" role="alert" hidden></p>
     <div class="settle-actions">
       <button type="button" class="primary-btn" id="settle-commit" data-action="settle-commit">确认余额，进入下一手</button>
+      <button type="button" class="ghost-btn" id="settle-end">保存并结束本桌</button>
       <button type="button" class="ghost-btn" data-action="settle-cancel">取消，继续纠正本手</button>
     </div>`;
   bindSettleEvents(area);
@@ -673,6 +665,9 @@ function bindSettleEvents(area) {
     else renderAll();
   });
   area.querySelector("#settle-commit").addEventListener("click", () => commitSettlement(area));
+  area.querySelector("#settle-end").addEventListener("click", () => {
+    if (window.confirm("保存当前填写的本手结果并结束牌桌？")) commitSettlement(area, true);
+  });
 }
 
 function needsCalibration(s) {
@@ -685,6 +680,7 @@ function updateCommitLabel() {
   const button = $("#settle-commit");
   if (!button) return;
   button.disabled = rt.committing || s.settlementDraft.rows.some(row => row.finalChips === null);
+  $("#settle-end").disabled = button.disabled;
   try {
     const candidate = previewRoster(s, s.nextHandDraft?.rosterEdits || []);
     const ending = activeSeats(candidate).length < 2 || candidate.occupants[s.heroOccupantId]?.status !== "active";
@@ -793,27 +789,28 @@ function renderPositionPreview(container) {
   };
 }
 
-async function commitSettlement(area) {
+async function commitSettlement(area, endTable = false) {
   if (rt.committing || rt.conflict) return;
   rt.committing = true;
   area.querySelector("#settle-commit").disabled = true;
   try {
-    await commitCurrentSettlement();
+    await commitCurrentSettlement(endTable);
     renderAll();
   } catch (e) { showSettleError(`结算未完成：${e.message}`); }
   finally {
     rt.committing = false;
+    syncInteractionLock();
     if (rt.session.phase === "settling") updateCommitLabel();
     else renderAll();
   }
   if (rt.session.phase !== "settling") syncLearningJobs();
 }
 
-async function commitCurrentSettlement() {
+async function commitCurrentSettlement(endTable = false) {
   const s = rt.session;
   const quickFold = !!s.currentHand.quickFold;
   confirmAllCurrentValues(s.settlementDraft);
-  const tx = beginCommit(s);
+  const tx = beginCommit(s, {endSession: endTable});
   const committed = completeCommit(s, tx, null);
   if (committed.phase !== "ended") await prepareContext(committed);
   assertCommitCurrent(rt.session, tx);
@@ -845,6 +842,7 @@ function maybeAdvice() {
     || !s.currentHand.heroCards[0]) { rt.adviceState = "idle"; return; }
   if (view.actor_seat_id !== heroSeatOf(s)) { rt.adviceState = "idle"; renderAdvice(); return; }
   rt.adviceState = "pending";
+  rt.adviceError = "";
   renderAdvice();
   const capturedOps = s.currentHand.ops;
   rt.coord.submitAdvice(rt.session, viewPayload(capturedOps), {
@@ -853,7 +851,8 @@ function maybeAdvice() {
       rt.adviceState = "updated";
       renderAdvice();
     },
-    onError() {
+    onError(error) {
+      rt.adviceError = error.message;
       rt.adviceState = "failed";
       renderAdvice();
     },
@@ -863,6 +862,11 @@ function maybeAdvice() {
 /* ------------------------------------------------------------- 渲染 */
 
 function resyncAll() { rt.coord?.resync(rt.session); }
+
+function syncInteractionLock() {
+  $("#layout").inert = rt.committing;
+  $("#bar-main-slot").inert = rt.committing;
+}
 
 function renderAll() {
   if (!rt.session) return;
@@ -893,8 +897,7 @@ function renderAll() {
   renderNextSettings();
   renderIcm();
   renderDeck();
-  $("#layout").inert = rt.committing;
-  $("#bar-main-slot").inert = rt.committing;
+  syncInteractionLock();
 }
 
 function renderWorkflow() {
@@ -952,7 +955,7 @@ function renderSessionBar() {
   const occ = s.occupants[s.heroOccupantId];
   const phaseText = { ready: "待录入", playing: "进行中", settling: "待核对筹码", ended: "本桌已结束" }[s.phase] || "";
   $("#session-status").innerHTML = s.phase === "ended"
-    ? `本桌已结束 · 共 ${s.handNumber} 手 · 你最终 ${fmtChips(occ?.confirmedChips ?? 0)} 筹码`
+    ? `本桌已结束 · 共 ${completedHandsOf(s)} 手 · 你最后记录 ${fmtChips(occ?.confirmedChips ?? 0)} 筹码${occ?.chipsEstimated ? "（估算）" : ""}`
     : `本桌第 ${s.handNumber} 手 · ${phaseText} · 你：${seat ?? "—"}号座/${esc(roleLabel)} · ` +
       `盲注 ${s.blindLevel.sb}/${s.blindLevel.bb} · 每人前注 ${s.blindLevel.anteEach} · ` +
       `${fmtChips(occ?.confirmedChips ?? 0)} 筹码`;
@@ -1396,11 +1399,14 @@ function renderAdvice() {
     return;
   }
   if (rt.adviceState === "failed") {
-    box.innerHTML = '<p class="form-error">推演失败</p><button type="button" id="retry-advice">重试推演</button>';
+    box.innerHTML = `<p class="form-error">${esc(rt.adviceError || "推演失败")}</p><button type="button" id="retry-advice">重试推演</button>`;
     $("#retry-advice").onclick = maybeAdvice; note.textContent = ""; return;
   }
   if (rt.adviceState === "pending" || !rt.advice) {
-    box.innerHTML = '<p class="empty">正在推演…</p>';
+    box.innerHTML = '<p class="empty">正在推演…最多等待2分钟，可继续录入动作。</p><button type="button" class="ghost-btn" id="cancel-advice">取消推演</button>';
+    $("#cancel-advice").onclick = () => {
+      rt.coord.invalidateAdvice(); rt.adviceState = "failed"; rt.adviceError = "已取消推演，可重新推演"; renderAdvice();
+    };
     note.textContent = "";
     return;
   }
@@ -1443,7 +1449,7 @@ function renderAdvice() {
       <table class="adv-table"><thead><tr><th>位置</th><th>局面 · 组合</th><th>剩余</th></tr></thead><tbody>${oppRows}</tbody></table>
     </details>
     ${cfrHtml}
-    <p class="footnote">${esc(adv.note || "")} · 基于 ${fmtChips(eq.iterations)} 次模拟（范围假设，非实测）</p>`;
+    <p class="footnote">${esc(adv.note || "")} · 基于 ${fmtChips(eq.iterations)} 次${eq.exact ? "精确枚举" : "有效模拟"}${eq.rejected_iterations ? `（请求 ${fmtChips(eq.requested_iterations)} 次，范围冲突跳过 ${fmtChips(eq.rejected_iterations)} 次）` : ""}（范围假设，非实测）</p>`;
   note.textContent = `需跟注 ${fmtChips(adv.to_call || 0)} / ${chipsToBBText(adv.to_call || 0, bb)}BB`;
 }
 
@@ -1509,14 +1515,30 @@ function renderAdvanced() {
     wrap.querySelector("#tg-export").addEventListener("click", () => {
       downloadRaw(JSON.stringify(rt.session, null, 2));
     });
-    wrap.querySelector("#tg-end-session").addEventListener("click", () => {
-      if (!window.confirm("结束当前牌桌？已确认的余额与本桌记录将保留。")) return;
-      import("./session.js?v=startup-20260919-1").then((S) => {
-        S.endSession(rt.session);
-        rt.coord.resync(rt.session);
-        persist();
+    wrap.querySelector("#tg-end-session").addEventListener("click", async () => {
+      if (rt.committing || rt.conflict || rt.coord.viewPending() || rt.session.phase === "ended") return;
+      if (rt.session.phase === "settling") {
+        if (window.confirm("保存当前填写的本手结果并结束牌桌？待核对余额仍须补齐，可明确沿用对手估算。")) {
+          await commitSettlement($("#settle-area"), true);
+        }
+        return;
+      }
+      if (rt.session.phase === "playing" || rt.session.currentHand.heroCards.some(Boolean) || rt.session.currentHand.ops.length) {
+        onManualClose();
+        return;
+      }
+      if (!window.confirm("结束当前牌桌？保留已记录余额；尚未开始的本手不计入完成数量。")) return;
+      rt.committing = true;
+      syncInteractionLock();
+      try {
+        const ended = structuredClone(rt.session);
+        endSession(ended);
+        await persistAtomic(ended);
+        rt.session = ended;
+        rt.coord.resync(ended);
         renderAll();
-      });
+      } catch (e) { rt.error = e.message; renderAll(); }
+      finally { rt.committing = false; syncInteractionLock(); }
     });
   }
   renderProfileNames();

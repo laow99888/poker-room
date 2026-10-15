@@ -1,0 +1,82 @@
+{
+  "results": [
+    {
+      "name": "check-silently-calls",
+      "reproduced": true,
+      "detail": {
+        "status": 200,
+        "requested": "check",
+        "starting": 10000,
+        "resulting": 9800,
+        "pot": 500
+      }
+    },
+    {
+      "name": "short-allin-call-rejected",
+      "reproduced": true,
+      "detail": {
+        "allin": 400,
+        "call": 200
+      }
+    },
+    {
+      "name": "icm-overflow-500",
+      "reproduced": true,
+      "detail": {
+        "finite_sum_prepare": 200,
+        "finite_sum_view": 500,
+        "huge_integer_prepare": 500
+      }
+    },
+    {
+      "name": "api-drops-weights",
+      "reproduced": true,
+      "detail": {
+        "api_equity": 52.0,
+        "direct_equity": 0.0
+      }
+    },
+    {
+      "name": "requested-vs-effective-samples",
+      "reproduced": true,
+      "detail": {
+        "reported": 1000,
+        "effective": 991
+      }
+    },
+    {
+      "name": "global-reset-race",
+      "reproduced": true,
+      "detail": {
+        "reset_returned_success": true,
+        "deleted_user_restored": true
+      }
+    },
+    {
+      "name": "corrupt-stats-overwritten",
+      "reproduced": true,
+      "detail": {
+        "backup_created": false
+      }
+    },
+    {
+      "name": "summary-count-is-player-samples",
+      "reproduced": true,
+      "detail": {
+        "completed_hands": 1,
+        "total_hands": 5,
+        "legacy_pool_hands": 0
+      }
+    },
+    {
+      "name": "forged-owner-can-read-and-reset",
+      "reproduced": true,
+      "detail": {
+        "authenticated": false,
+        "attacker_knows_uid": true,
+        "read_hands": 20,
+        "hands_after_reset": 0
+      }
+    }
+  ]
+}

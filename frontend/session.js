@@ -219,6 +219,7 @@ export function createSession(input) {
     previousBigBlindOccupantId: null,
     previousBigBlindSeatId: null,
     handNumber: 1,
+    completedHands: 0,
     currentHand: null,
     settlementDraft: null,
     nextHandDraft: null,
@@ -439,9 +440,20 @@ export function cancelSettlement(session) {
 }
 
 export function endSession(session) {
+  requirePhase(session, ["ready", "ended"]);
+  if (session.phase !== "ended" && (session.currentHand?.ops.length || session.currentHand?.heroCards.some(Boolean))) {
+    throw new DomainError("settlement_required", "本手已有记录，请先核对余额并结算结束");
+  }
   session.phase = "ended";
-  session.settlementDraft = null;
+  session.currentHand = null;
+  session.nextHandDraft = null;
   return bumpRevision(session);
+}
+
+export function completedHandsOf(session) {
+  if (Number.isSafeInteger(session.completedHands)) return session.completedHands;
+  // 老存档摘要已裁剪到100手，但最后一条手号仍保留累计进度。
+  return Math.max(0, ...(session.recentHands || []).map(h => h.handNumber || 0));
 }
 
 /* -------------------------------------------------------- C03/C04 结算草稿 */
@@ -814,7 +826,8 @@ export function beginCommit(session, opts) {
     err.details = check;
     throw err;
   }
-  const nextDraft = opts?.nextHandDraft || session.nextHandDraft || emptyNextHandDraft(session);
+  const nextDraft = opts?.endSession ? emptyNextHandDraft(session)
+    : opts?.nextHandDraft || session.nextHandDraft || emptyNextHandDraft(session);
   if (nextDraft.settingsError) throw new DomainError("bad_settings", nextDraft.settingsError);
   setDraftBlinds(nextDraft, nextDraft.blindLevel.sb, nextDraft.blindLevel.bb, nextDraft.blindLevel.anteEach);
   const tx = {
@@ -825,6 +838,7 @@ export function beginCommit(session, opts) {
     settlement: clone(draft),
     nextDraft: clone(nextDraft),
     fingerprint: JSON.stringify(session),
+    endSession: !!opts?.endSession,
   };
   return tx;
 }
@@ -872,6 +886,7 @@ export function completeCommit(session, tx, prepared) {
   }
   next.recentHands.push(summary);
   if (next.recentHands.length > 100) next.recentHands.shift();
+  next.completedHands = completedHandsOf(session) + 1;
 
   const heroGone = next.occupants[next.heroOccupantId]?.status !== "active";
   const activeCount = activeSeats(next).length;
@@ -889,7 +904,7 @@ export function completeCommit(session, tx, prepared) {
     nextHandId: null,
   };
 
-  if (heroGone || next.occupants[next.heroOccupantId]?.status !== "active" || activeCount < 2) {
+  if (tx.endSession || heroGone || next.occupants[next.heroOccupantId]?.status !== "active" || activeCount < 2) {
     // M08/C15：英雄离场或不足 2 人 → 保存本手并结束
     next.phase = "ended";
     next.currentHand = null;

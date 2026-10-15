@@ -11,6 +11,7 @@ from backend import opponents
 
 @pytest.fixture(autouse=True)
 def isolated_stats(tmp_path, monkeypatch):
+    monkeypatch.setenv("POKER_SESSION_SECRET", "isolated-tests-only-session-secret-20261016")
     target = tmp_path / "opponents.json"
     monkeypatch.setattr(opponents, "_DATA", target)
     target.write_text("{}", encoding="utf-8")

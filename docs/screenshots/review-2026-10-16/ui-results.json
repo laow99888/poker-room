@@ -1,0 +1,43 @@
+{
+  "results": [
+    {
+      "name": "end-count-off-by-one",
+      "reproduced": true,
+      "detail": {
+        "completed": 1,
+        "displayed": "本桌已结束 · 共 2 手 · 你最终 9,900 筹码"
+      }
+    },
+    {
+      "name": "end-discards-real-balance",
+      "reproduced": true,
+      "detail": {
+        "enteredActual": 9000,
+        "persistedFinal": 10000,
+        "settlementDraft": null,
+        "completed": 0,
+        "displayed": "本桌已结束 · 共 1 手 · 你最终 10,000 筹码"
+      }
+    },
+    {
+      "name": "advice-stall-no-retry",
+      "reproduced": true,
+      "detail": {
+        "waitedMs": 16500,
+        "busy": "true",
+        "text": "正在推演…",
+        "retryButton": false
+      }
+    },
+    {
+      "name": "settlement-failure-leaves-page-inert",
+      "reproduced": true,
+      "detail": {
+        "layoutInert": true,
+        "headerInert": true,
+        "retryButtonDisabled": false,
+        "error": "结算未完成：保存失败，尚未进入下一手。请导出备份后重试"
+      }
+    }
+  ]
+}

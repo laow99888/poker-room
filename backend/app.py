@@ -1,20 +1,48 @@
 """本地 FastAPI 应用：/api/equity + /api/hand/* + 静态前端，全程离线（绑定 127.0.0.1）。"""
 
-import math
 import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from . import decision, equity, opponents
-from .icm import ICMError, icm_equities
+from .icm import ICMError, icm_equities, validate_payouts
 from .ranges import InvalidHandError
 from .table import TableError, replay_state
+from . import browser_identity
+from .compute_budget import limited
 
 app = FastAPI(title="大魔丸 · 德州扑克离线决策辅助", docs_url=None, redoc_url=None)
+
+
+@app.exception_handler(opponents.StatsStorageError)
+async def stats_storage_error(request, exc):
+    return JSONResponse({"detail": str(exc)}, status_code=503)
+
+
+@app.middleware("http")
+async def signed_browser_identity(request, call_next):
+    public_origin = os.environ.get("POKER_PUBLIC_ORIGIN", str(request.base_url).rstrip("/")).rstrip("/")
+    # X-Player-Id是不可信文本，不再参与数据归属。
+    if request.url.path.startswith("/api/") and request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        if (request.headers.get("sec-fetch-site") == "cross-site"
+                or (origin and origin != public_origin)):
+            return JSONResponse({"detail": "拒绝跨站写入请求"}, status_code=403)
+    try:
+        uid, new_cookie = browser_identity.identity(request.cookies.get(browser_identity.COOKIE))
+    except (RuntimeError, OSError):
+        return JSONResponse({"detail": "会话服务暂不可用"}, status_code=503)
+    request.state.player_id = uid
+    response = await call_next(request)
+    if new_cookie:
+        response.set_cookie(browser_identity.COOKIE, new_cookie, max_age=365 * 86400,
+                            httponly=True, samesite="strict", secure=public_origin.startswith("https://"))
+    return response
 
 
 class VillainIn(BaseModel):
@@ -22,6 +50,12 @@ class VillainIn(BaseModel):
     cards: List[str] = []
     text: str = ""
     combos: List[List[str]] = []
+    weights: Optional[List[float]] = None
+
+    @field_validator("weights", mode="before")
+    @classmethod
+    def _valid_weights(cls, value):
+        return equity.validate_weights(value)
 
 
 class EquityIn(BaseModel):
@@ -40,14 +74,11 @@ class HandConfigIn(BaseModel):
     stacks: Optional[List[int]] = None
     payouts: List[float] = []   # 决赛桌奖金结构（可选），如 [500, 300, 200]
 
-    @field_validator("payouts")
+    @field_validator("payouts", mode="before")
     @classmethod
     def _finite_payouts(cls, v):
         # 31：奖金必须是有限数值，Infinity/NaN 会让 ICM 计算产生 500
-        for p in v:
-            if not math.isfinite(p):
-                raise ValueError(f"奖金必须为有限数值，收到 {p!r}")
-        return v
+        return validate_payouts(v, allow_empty=True)
 
 
 def _dump(v) -> dict:
@@ -55,6 +86,7 @@ def _dump(v) -> dict:
 
 
 @app.post("/api/equity")
+@limited
 def equity_api(payload: EquityIn):
     if not 1_000 <= payload.iterations <= 1_000_000:
         raise HTTPException(400, "模拟次数需在 1,000 到 1,000,000 之间")
@@ -75,7 +107,7 @@ def equity_api(payload: EquityIn):
 async def no_cache_static(request, call_next):
     """本地工具：静态资源禁缓存，避免改版后浏览器拿旧文件。"""
     response = await call_next(request)
-    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api/") else "no-cache"
     return response
 
 
@@ -145,6 +177,7 @@ def hand_view_api(payload: HandIn):
 
 
 @app.post("/api/hand/advice")
+@limited
 def hand_advice_api(payload: HandIn, request: Request):
     if not 1_000 <= payload.iterations <= 1_000_000:
         raise HTTPException(400, "模拟次数需在 1,000 到 1,000,000 之间")
@@ -167,9 +200,8 @@ def hand_advice_api(payload: HandIn, request: Request):
 
 
 def _player_id(request: Request) -> str:
-    """匿名用户命名空间（27）：前端生成的随机 ID，仅用于隔离数据归属，
-    不是身份认证；缺失或非法回退 "local"（本地单人模式）。"""
-    return opponents._clean_uid(request.headers.get("X-Player-Id"))
+    """只使用服务器验证过的身份，禁止客户端指定目标数据命名空间。"""
+    return request.state.player_id
 
 
 @app.post("/api/stats/record")
@@ -358,6 +390,7 @@ def hand_view_v2_api(payload: dict, request: Request):
 
 
 @app.post("/api/hand/v2/advice")
+@limited
 def hand_advice_v2_api(payload: dict, request: Request):
     return _v2_hand(payload, request, want_advice=True)
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import random
 from itertools import combinations
+from .compute_budget import checkpoint
 
 try:
     from treys import Card as _TCard, Evaluator as _Evaluator
@@ -147,6 +148,8 @@ def solve_tree(tree, iterations: int = 4000) -> dict:
     """
     tables: dict = {}
     for t in range(1, iterations + 1):
+        if t % 16 == 1:
+            checkpoint()
         _cfr(tree, (t - 1) % 2, 1.0, 1.0, 0, 0, None, tables, t)
     return _avg_strategy(tables)
 
@@ -158,6 +161,8 @@ def solve_pairs(skeleton, pairs, vmat, iterations: int = 1200) -> dict:
     """
     tables: dict = {}
     for t in range(1, iterations + 1):
+        if t % 16 == 1:
+            checkpoint()
         u = (t - 1) % 2
         for pp, a, b in pairs:
             # 机会概率同时计入双方 reach：对手 reach 承担机会权重（反事实值需要），
@@ -312,6 +317,7 @@ def solve_river(board, hero_combos, villain_combos, pot_bb: float = None,
     nh, nv = len(hero), len(villain)
     vmat = [[None] * nv for _ in range(nh)]
     for i, hc in enumerate(hero):
+        checkpoint()
         h0, h1 = _t(hc[0]), _t(hc[1])
         hc_set = set(hc)
         row = vmat[i]
@@ -543,6 +549,8 @@ def _rollout_eq(hero_combo, villain_combo, board, samples, rand):
         return wins / n
     wins = 0.0
     for _ in range(samples):
+        if _ % 128 == 0:
+            checkpoint()
         wins += win_on(board_t + rand.sample(deck_t, need))
     return wins / samples
 

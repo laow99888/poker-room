@@ -201,6 +201,11 @@ def _apply_action(state, op) -> None:
     if kind == "fold":
         state.fold()
     elif kind in ("check", "call"):
+        amount = state.checking_or_calling_amount
+        if kind == "check" and amount:
+            raise TableError("面对下注不能过牌，请跟注或弃牌")
+        if kind == "call" and amount == 0:
+            raise TableError("当前无需跟注，请过牌")
         state.check_or_call()
     elif kind == "raise":
         to = op.get("to")
@@ -222,7 +227,10 @@ def _apply_action(state, op) -> None:
             )
         state.complete_bet_or_raise_to(to)
     elif kind == "allin":
-        state.complete_bet_or_raise_to(state.max_completion_betting_or_raising_to_amount)
+        if state.checking_or_calling_amount == state.stacks[actor]:
+            state.check_or_call()
+        else:
+            state.complete_bet_or_raise_to(state.max_completion_betting_or_raising_to_amount)
     else:
         raise TableError(f"未知动作：{kind!r}")
 

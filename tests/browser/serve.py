@@ -12,5 +12,6 @@ from backend.app import app
 
 with tempfile.TemporaryDirectory(prefix="poker-session-qa-") as directory:
     opponents._DATA = Path(directory) / "opponents.json"
+    os.environ["POKER_SESSION_KEY_FILE"] = str(Path(directory) / "session.key")
     print(f"PID={os.getpid()} ISOLATED_STATS={directory}", flush=True)
     uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("POKER_QA_PORT", "8142")), log_level="warning")
